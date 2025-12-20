@@ -36,46 +36,42 @@ function runSimulation() {
     const totalRunes = parseInt(document.getElementById('runeInput').value) || 0;
     const runeLimit = totalRunes * 0.9;
 
-    let bestOptionsPerStage = [];
+    let allSteps = [];
 
+    // 全99段階について、1枚ずつの「工程」をバラバラに抽出する
     for (let n = 2; n <= 100; n++) {
-        let baseP = (101 - n) / 100;
-        let bestEfficiency = -1;
-        let bestSet = null;
+        let baseProb = (101 - n) / 100;
+        let currentP = baseProb;
+        
+        while (currentP < 1.0) {
+            let nextP = Math.min(1.0, currentP + 0.1);
+            let materialSaving = (1 / currentP) - (1 / nextP);
+            let expectedRuneCostForThisStep = 1 / nextP; 
+            let efficiency = materialSaving / expectedRuneCostForThisStep;
 
-        // 1枚から9枚使うパターンのうち、どれが「1枚あたり」最も素材を節約するか探す
-        for (let k = 1; k <= 9; k++) {
-            let nextP = Math.min(1.0, baseP + (k * 0.1));
-            let materialSaving = (1 / baseP) - (1 / nextP);
-            let expectedRuneCost = k / nextP;
-            let efficiency = materialSaving / expectedRuneCost;
-
-            if (efficiency > bestEfficiency) {
-                bestEfficiency = efficiency;
-                bestSet = {
-                    stage: n,
-                    numRunes: k,
-                    efficiency: efficiency,
-                    materialSaving: materialSaving,
-                    expectedRuneCost: expectedRuneCost
-                };
-            }
+            allSteps.push({
+                stage: n,
+                efficiency: efficiency,
+                materialSaving: materialSaving,
+                expectedRuneCost: expectedRuneCostForThisStep
+            });
+            currentP = nextP;
         }
-        bestOptionsPerStage.push(bestSet);
     }
 
-    // 各段階の「ベストな使い方」を効率順にソート
-    bestOptionsPerStage.sort((a, b) => b.efficiency - a.efficiency);
+    // 全ての「1枚追加する工程」を効率順にソート
+    allSteps.sort((a, b) => b.efficiency - a.efficiency);
 
     let summaryMap = {};
     let currentRuneTotal = 0;
     let totalMaterialSaved = 0;
 
-    for (let opt of bestOptionsPerStage) {
-        if (currentRuneTotal + opt.expectedRuneCost <= runeLimit) {
-            summaryMap[opt.stage] = opt.numRunes;
-            currentRuneTotal += opt.expectedRuneCost;
-            totalMaterialSaved += opt.materialSaving;
+    // 効率が良い1枚から順に、上限まで積み上げる
+    for (let step of allSteps) {
+        if (currentRuneTotal + step.expectedRuneCost <= runeLimit) {
+            summaryMap[step.stage] = (summaryMap[step.stage] || 0) + 1;
+            currentRuneTotal += step.expectedRuneCost;
+            totalMaterialSaved += step.materialSaving;
         }
     }
 
