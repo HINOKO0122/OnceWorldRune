@@ -8,7 +8,7 @@
         .card { background: #2a2a2a; padding: 20px; border-radius: 10px; border: 1px solid #444; }
         h1 { color: #ff4444; text-align: center; border-bottom: 2px solid #ff4444; }
         .input-area { background: #333; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center; }
-        input { font-size: 20px; padding: 10px; width: 120px; }
+        input { font-size: 20px; padding: 10px; width: 120px; border-radius: 5px; }
         button { font-size: 20px; padding: 10px 20px; background: #ff4444; color: white; border: none; cursor: pointer; }
         .summary-box { background: #1e3a5f; padding: 15px; border-radius: 5px; margin-bottom: 15px; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #222; }
@@ -35,47 +35,43 @@ function runSimulation() {
 
     let allSteps = [];
 
-    // 99段階の強化(2回目〜100回目)
+    // 2回目(素の確率99%)から100回目(1%)まで
     for (let n = 2; n <= 100; n++) {
         let baseP = (101 - n) / 100;
         let currentP = baseP;
 
-        // 1枚ずつ追加して、その「1枚」の効率を計算
+        // 最大10枚目までの「1枚ごとの追加効率」を計算
         for (let k = 1; k <= 10; k++) {
-            let isFinalStep = false;
-            let nextP;
+            let nextP = Math.min(1.0, currentP + 0.1);
+            if (currentP >= 1.0) break;
 
-            // 成功率91%〜99%の段階 or 100%にするための最後の一押し
-            if (currentP > 0.905) {
-                nextP = 1.0;
-                isFinalStep = true;
-            } else {
-                nextP = currentP + 0.1;
-            }
-
+            // 素材節約量 = (1/P_old) - (1/P_new)
             let materialSaving = (1 / currentP) - (1 / nextP);
-            let expectedRuneCost = 1 / nextP; // 石板1枚が「消費」される期待値
+            // 石板消費期待値 = 1枚 / P_new (失敗すると消えるので)
+            let expectedRuneCost = 1 / nextP;
+            // 石板1枚あたりの節約効率
             let efficiency = materialSaving / expectedRuneCost;
 
             allSteps.push({
                 stage: n,
                 efficiency: efficiency,
                 materialSaving: materialSaving,
-                runeCost: expectedRuneCost
+                runeCost: expectedRuneCost,
+                kth: k // 何枚目の石板か
             });
 
-            if (isFinalStep) break;
             currentP = nextP;
         }
     }
 
-    // 189パターンを「1枚あたりの効率」で降順ソート
+    // 全ての工程(最大990工程)を「1枚あたりの効率」でソート
     allSteps.sort((a, b) => b.efficiency - a.efficiency);
 
     let summaryMap = {};
     let totalExpectedRunes = 0;
     let totalSaved = 0;
 
+    // 効率が良い1枚から順に、上限まで積み上げる
     for (let step of allSteps) {
         if (totalExpectedRunes + step.runeCost <= runeLimit) {
             summaryMap[step.stage] = (summaryMap[step.stage] || 0) + 1;
@@ -94,9 +90,6 @@ function runSimulation() {
         if (summaryMap[n]) {
             let base = (101 - n);
             let finalP = Math.min(100, base + (summaryMap[n] * 10));
-            // 91%以上から端数で100%にした場合も考慮
-            if (base + (summaryMap[n]-1)*10 > 90) finalP = 100;
-
             html += `<tr><td>${n}回目</td><td>${base}%</td><td><b style="color:#ff4444;">${summaryMap[n]} 枚</b></td><td>${finalP}%</td></tr>`;
         }
     }
