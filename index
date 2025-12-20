@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Once Human 装備強化最適化ツール</title>
+    <style>
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto; padding: 20px; background: #f0f2f5; }
+        .container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h1 { color: #1a1a1a; border-bottom: 3px solid #e74c3c; padding-bottom: 10px; font-size: 24px; }
+        .input-group { margin: 20px 0; background: #fff8f8; padding: 20px; border-radius: 8px; border: 1px solid #ffcfcf; }
+        input[type="number"] { width: 100px; padding: 10px; font-size: 18px; border: 2px solid #ddd; border-radius: 4px; }
+        button { padding: 10px 20px; font-size: 18px; background: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer; transition: 0.3s; }
+        button:hover { background: #c0392b; }
+        .result-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        .result-table th, .result-table td { padding: 12px; border: 1px solid #eee; text-align: center; }
+        .result-table th { background: #34495e; color: white; }
+        .highlight { background: #fff4e5; font-weight: bold; color: #d35400; }
+        .summary { font-size: 1.2em; margin-bottom: 15px; padding: 10px; background: #e8f4fd; border-radius: 5px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>装備強化MAX・最適ルーン石板配置</h1>
+    <div class="input-group">
+        <label>使用予定のルーン石板総数: </label>
+        <input type="number" id="runeInput" value="100" min="1">
+        <button onclick="runSimulation()">配置を計算する</button>
+        <p style="font-size: 0.9em; color: #666; margin-top: 10px;">※安全係数 0.9 を適用し、上位 <b><span id="safeLimit">0</span>枚</b> までの最適配置を表示します。</p>
+    </div>
+    <div id="output"><p>枚数を入力してボタンを押してください。</p></div>
+</div>
+<script>
+function runSimulation() {
+    const totalRunes = parseInt(document.getElementById('runeInput').value);
+    const safeLimit = Math.floor(totalRunes * 0.9);
+    document.getElementById('safeLimit').innerText = safeLimit;
+    let allOptions = [];
+    for (let n = 2; n <= 100; n++) {
+        let baseProb = (101 - n) / 100;
+        let currentP = baseProb;
+        while (currentP < 1.0) {
+            let nextP = Math.min(1.0, currentP + 0.1);
+            let saving = (1 / currentP) - (1 / nextP);
+            allOptions.push({ stage: n, fromP: (currentP * 100).toFixed(0), toP: (nextP * 100).toFixed(0), saving: saving });
+            currentP = nextP;
+        }
+    }
+    allOptions.sort((a, b) => b.saving - a.saving);
+    let selection = allOptions.slice(0, safeLimit);
+    let summaryMap = {};
+    let totalSaved = 0;
+    selection.forEach(opt => {
+        summaryMap[opt.stage] = (summaryMap[opt.stage] || 0) + 1;
+        totalSaved += opt.saving;
+    });
+    let html = `<div class="summary">合計節約素材（期待値）: <b>約 ${totalSaved.toFixed(2)} 個分</b></div>`;
+    html += `<table class="result-table"><tr><th>強化回数(n)</th><th>元の確率</th><th>石板投入枚数</th><th>投入後の確率</th></tr>`;
+    for (let n = 100; n >= 2; n--) {
+        if (summaryMap[n]) {
+            let base = (101 - n);
+            let added = summaryMap[n] * 10;
+            let finalP = Math.min(100, base + added);
+            html += `<tr class="highlight"><td>${n}回目</td><td>${base}%</td><td>${summaryMap[n]} 枚</td><td>${finalP}%</td></tr>`;
+        }
+    }
+    html += `</table>`;
+    document.getElementById('output').innerHTML = html;
+}
+</script>
+</body>
+</html>
