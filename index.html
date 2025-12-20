@@ -9,69 +9,88 @@
         .card { background: #2a2a2a; padding: 20px; border-radius: 10px; border: 1px solid #444; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
         h1 { color: #ff4444; text-align: center; border-bottom: 2px solid #ff4444; padding-bottom: 10px; }
         .input-area { background: #333; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center; }
-        input { font-size: 20px; padding: 10px; width: 120px; border-radius: 5px; border: none; margin-right: 10px; }
+        input { font-size: 20px; padding: 10px; width: 120px; border-radius: 5px; border: none; margin-right: 10px; background: #fff; color: #000; }
         button { font-size: 20px; padding: 10px 20px; background: #ff4444; color: white; border: none; border-radius: 5px; cursor: pointer; }
-        button:hover { background: #cc0000; }
+        .summary-box { background: #1e3a5f; color: #fff; padding: 15px; border-radius: 5px; margin-bottom: 15px; border-left: 5px solid #3498db; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #222; }
         th, td { border: 1px solid #444; padding: 12px; text-align: center; }
         th { background: #444; color: #ff4444; }
-        .res-row { background: #2d2d2d; }
-        .res-row:nth-child(even) { background: #333; }
-        .info { color: #aaa; font-size: 0.9em; margin-top: 10px; }
+        .res-row:nth-child(even) { background: #2d2d2d; }
     </style>
 </head>
-<body onload="runSimulation()"> <div class="card">
+<body onload="runSimulation()">
+
+<div class="card">
     <h1>装備強化MAX・最適ルーン</h1>
     
     <div class="input-area">
         <p>所持しているルーン石板の総数</p>
         <input type="number" id="runeInput" value="100">
         <button onclick="runSimulation()">計算！</button>
-        <div class="info">※安全係数0.9を適用：上位 <span id="safeLimit">0</span>枚を配置</div>
+        <p style="color: #aaa; font-size: 0.85em; margin-top: 10px;">
+            ※石板消滅リスク考慮済み。安全係数0.9適用。
+        </p>
     </div>
 
-    <div id="summaryArea" style="margin-bottom:15px; font-weight:bold; font-size:1.1em; color:#00ff00;"></div>
-    
-    <div id="output">
-        </div>
+    <div id="summaryArea" class="summary-box"></div>
+    <div id="output"></div>
 </div>
 
 <script>
 function runSimulation() {
     const totalRunes = parseInt(document.getElementById('runeInput').value) || 0;
     const safeLimit = Math.floor(totalRunes * 0.9);
-    document.getElementById('safeLimit').innerText = safeLimit;
 
     let allOptions = [];
+    
     for (let n = 2; n <= 100; n++) {
         let baseProb = (101 - n) / 100;
         let currentP = baseProb;
+        
         while (currentP < 1.0) {
             let nextP = Math.min(1.0, currentP + 0.1);
-            let saving = (1 / currentP) - (1 / nextP);
-            allOptions.push({ stage: n, saving: saving });
+            
+            // 素材節約量 = (1/P_old) - (1/P_new)
+            let materialSaving = (1 / currentP) - (1 / nextP);
+            // このステップで成功するまでに消費する「追加の石板枚数」の期待値
+            // 石板を使わない場合は0、使う場合は 1/P_new 枚必要になる
+            let runeExpense = (1 / nextP);
+            
+            // 石板1枚あたりの素材節約効率
+            let efficiency = materialSaving / runeExpense;
+            
+            allOptions.push({ 
+                stage: n, 
+                efficiency: efficiency,
+                materialSaving: materialSaving
+            });
             currentP = nextP;
         }
     }
 
-    allOptions.sort((a, b) => b.saving - a.saving);
+    // 「石板1枚あたりの素材節約効率」でソート
+    allOptions.sort((a, b) => b.efficiency - a.efficiency);
+
     let selection = allOptions.slice(0, safeLimit);
     let summaryMap = {};
-    let totalSaved = 0;
+    let totalMaterialSaved = 0;
 
     selection.forEach(opt => {
         summaryMap[opt.stage] = (summaryMap[opt.stage] || 0) + 1;
-        totalSaved += opt.saving;
+        totalMaterialSaved += opt.materialSaving;
     });
 
-    document.getElementById('summaryArea').innerText = "素材の節約期待値: 約 " + totalSaved.toFixed(1) + " 個分";
+    document.getElementById('summaryArea').innerHTML = `
+        上位 <b>${safeLimit}枚</b> を最適配置しました。<br>
+        素材の節約期待値: <b>約 ${totalMaterialSaved.toFixed(1)} 個分</b>
+    `;
 
-    let html = "<table><tr><th>強化回数</th><th>元の確率</th><th>石板使用数</th><th>強化後</th></tr>";
+    let html = "<table><tr><th>強化回数</th><th>素の確率</th><th>石板使用数</th><th>強化後</th></tr>";
     for (let n = 100; n >= 2; n--) {
         if (summaryMap[n]) {
             let base = (101 - n);
             let finalP = Math.min(100, base + (summaryMap[n] * 10));
-            html += `<tr class="res-row"><td>${n}回目</td><td>${base}%</td><td><b>${summaryMap[n]}枚</b></td><td>${finalP}%</td></tr>`;
+            html += `<tr class="res-row"><td>${n}回目</td><td>${base}%</td><td><b style="color:#ff4444;">${summaryMap[n]}枚</b></td><td>${finalP}%</td></tr>`;
         }
     }
     html += "</table>";
