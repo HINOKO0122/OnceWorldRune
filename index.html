@@ -22,16 +22,14 @@
 
 <div class="card">
     <h1>装備強化MAX・最適ルーン</h1>
-    
     <div class="input-area">
         <p>用意したルーン石板の総数</p>
         <input type="number" id="runeInput" value="100">
         <button onclick="runSimulation()">計算！</button>
         <p style="color: #aaa; font-size: 0.85em; margin-top: 10px;">
-            ※石板消費（石板1枚あたりの素材節約効率）を厳密に計算。
+            ※石板1枚ごとのコスパを厳密に順位付けし、上限（0.9倍）まで配置。
         </p>
     </div>
-
     <div id="summaryArea" class="summary-box"></div>
     <div id="output"></div>
 </div>
@@ -41,49 +39,46 @@ function runSimulation() {
     const totalRunes = parseInt(document.getElementById('runeInput').value) || 0;
     const runeLimit = totalRunes * 0.9;
 
-    let allOptions = [];
-    
-    // 2〜100回目について、石板投入枚数ごとのコスパを計算
+    // 全強化段階(2〜100)において、最大9枚目までの「1枚ごとの追加価値」をリスト化
+    let allSteps = [];
     for (let n = 2; n <= 100; n++) {
-        let baseP = (101 - n) / 100;
+        let baseProb = (101 - n) / 100;
+        let currentP = baseProb;
         
         for (let k = 1; k <= 9; k++) {
-            let nextP = Math.min(1.0, baseP + (k * 0.1));
-            
-            // 素材の節約量
-            let materialSaving = (1 / baseP) - (1 / nextP);
-            // 消費する石板の期待値 (k枚 × 平均試行回数)
-            let expectedRuneCost = k / nextP;
-            // 石板1枚あたりの節約効率 (素材数 / 石板数)
-            let efficiency = materialSaving / expectedRuneCost;
-            
-            allOptions.push({ 
-                stage: n, 
-                numRunes: k,
+            let nextP = Math.min(1.0, currentP + 0.1);
+            if (currentP >= 1.0) break;
+
+            let materialSaving = (1 / currentP) - (1 / nextP);
+            let expectedRuneCostForThisStep = 1 / nextP; // この「追加の1枚」を消費する期待値
+            let efficiency = materialSaving / expectedRuneCostForThisStep;
+
+            allSteps.push({
+                stage: n,
                 efficiency: efficiency,
                 materialSaving: materialSaving,
-                expectedRuneCost: expectedRuneCost
+                expectedRuneCost: expectedRuneCostForThisStep
             });
+            currentP = nextP;
         }
     }
 
-    // コスパが良い順に並び替え
-    allOptions.sort((a, b) => b.efficiency - a.efficiency);
+    // すべての「石板1枚分のアクション」を効率順に並べる
+    allSteps.sort((a, b) => b.efficiency - a.efficiency);
 
-    let usedStages = new Set();
     let summaryMap = {};
     let currentRuneTotal = 0;
     let totalMaterialSaved = 0;
 
-    // 上限まで採用
-    for (let opt of allOptions) {
-        if (!usedStages.has(opt.stage)) {
-            if (currentRuneTotal + opt.expectedRuneCost <= runeLimit) {
-                summaryMap[opt.stage] = opt.numRunes;
-                usedStages.add(opt.stage);
-                currentRuneTotal += opt.expectedRuneCost;
-                totalMaterialSaved += opt.materialSaving;
-            }
+    // 上限に達するまで、効率の良い1枚から順に採用
+    for (let step of allSteps) {
+        if (currentRuneTotal + step.expectedRuneCost <= runeLimit) {
+            summaryMap[step.stage] = (summaryMap[step.stage] || 0) + 1;
+            currentRuneTotal += step.expectedRuneCost;
+            totalMaterialSaved += step.materialSaving;
+        } else {
+            // 上限超えたら終了
+            break;
         }
     }
 
