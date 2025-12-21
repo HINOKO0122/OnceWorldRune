@@ -8,7 +8,7 @@
         .card { background: #2a2a2a; padding: 20px; border-radius: 10px; border: 1px solid #444; }
         h1 { color: #ff4444; text-align: center; border-bottom: 2px solid #ff4444; }
         .input-area { background: #333; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center; }
-        input { font-size: 20px; padding: 10px; width: 120px; border-radius: 5px; }
+        input { font-size: 20px; padding: 10px; width: 120px; }
         button { font-size: 20px; padding: 10px 20px; background: #ff4444; color: white; border: none; cursor: pointer; }
         .summary-box { background: #1e3a5f; padding: 15px; border-radius: 5px; margin-bottom: 15px; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #222; }
@@ -33,23 +33,27 @@ function runSimulation() {
     const totalRunes = parseInt(document.getElementById('runeInput').value) || 0;
     const runeLimit = totalRunes * 0.9;
 
-    let allCombinations = [];
+    let allOptions = [];
 
-    // 2回目(99%)から100回目(1%)まで
     for (let n = 2; n <= 100; n++) {
         let baseP = (101 - n) / 100;
         
-        // 各段階で、石板を1枚〜10枚使う「すべての組み合わせ」を評価
+        // 1枚〜10枚使う全パターンを「1つの塊」として評価
         for (let k = 1; k <= 10; k++) {
-            let nextP = Math.min(1.0, baseP + (k * 0.1));
-            // 最後の1枚が10%上がらない(91%→100%など)場合は、自動的に1.0で打ち止め
-            if (baseP + ((k-1) * 0.1) >= 0.9) nextP = 1.0;
+            let nextP = baseP + (k * 0.1);
+            let isFull = false;
+            
+            // 100%になるケースの判定（91%以上から1枚、または1%から10枚など）
+            if (nextP >= 1.0 || (baseP + (k-1)*0.1 >= 0.905)) {
+                nextP = 1.0;
+                isFull = true;
+            }
 
             let materialSaving = (1 / baseP) - (1 / nextP);
             let expectedRuneCost = k / nextP;
             let efficiency = materialSaving / expectedRuneCost;
 
-            allCombinations.push({
+            allOptions.push({
                 stage: n,
                 numRunes: k,
                 efficiency: efficiency,
@@ -58,20 +62,20 @@ function runSimulation() {
                 nextP: nextP
             });
 
-            if (nextP === 1.0) break; // 100%に達したらそれ以上は計算不要
+            if (isFull) break; 
         }
     }
 
-    // 全ての「枚数セット」を1枚あたりの効率順にソート
-    allCombinations.sort((a, b) => b.efficiency - a.efficiency);
+    // 全ての「塊プラン」を効率順にソート
+    allOptions.sort((a, b) => b.efficiency - a.efficiency);
 
     let summaryMap = {};
     let currentRuneTotal = 0;
     let totalMaterialSaved = 0;
     let usedStages = new Set();
 
-    // 効率が良い「セット」から順に採用していく
-    for (let opt of allCombinations) {
+    // 効率が良い「塊（セット）」から順に採用
+    for (let opt of allOptions) {
         if (!usedStages.has(opt.stage)) {
             if (currentRuneTotal + opt.expectedRuneCost <= runeLimit) {
                 summaryMap[opt.stage] = opt.numRunes;
@@ -92,8 +96,7 @@ function runSimulation() {
         if (summaryMap[n]) {
             let base = (101 - n);
             let finalP = Math.min(100, base + (summaryMap[n] * 10));
-            // 100%判定の補正
-            if (base + (summaryMap[n]-1)*10 >= 90) finalP = 100;
+            if (base + (summaryMap[n]-1)*10 >= 90.5) finalP = 100;
 
             html += `<tr><td>${n}回目</td><td>${base}%</td><td><b style="color:#ff4444;">${summaryMap[n]} 枚</b></td><td>${finalP}%</td></tr>`;
         }
