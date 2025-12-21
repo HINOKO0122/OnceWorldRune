@@ -44,11 +44,14 @@ function runSimulation() {
         // その段階で「石板を何枚使うのが1枚あたり最も効率的か」を1〜10枚で探す
         for (let k = 1; k <= 10; k++) {
             let nextP = Math.min(1.0, baseP + (k * 0.1));
-            // 91%以上から使う場合は100%になる
-            if (baseP + (k-1)*0.1 >= 0.9) nextP = 1.0;
+            
+            // 91%以上から使う場合、または10枚使って100%にする場合
+            if (baseP + (k-1)*0.1 >= 0.9 || k === 10) {
+                nextP = 1.0;
+            }
 
             let materialSaving = (1 / baseP) - (1 / nextP);
-            let expectedRuneCost = k / nextP;
+            let expectedRuneCost = k / nextP; // 石板の消費期待値
             let efficiency = materialSaving / expectedRuneCost;
 
             if (efficiency > stageBestEfficiency) {
@@ -77,7 +80,7 @@ function runSimulation() {
         if (totalExpectedRunes + plane.expectedRuneCost <= runeLimit) {
             summaryMap[plane.stage] = plane;
             totalExpectedRunes += plane.expectedRuneCost;
-            totalSaved += ( (1 / ((101 - plane.stage)/100)) - (1 / (plane.finalP/100)) );
+            totalSaved += plane.materialSaving;
         }
     }
 
