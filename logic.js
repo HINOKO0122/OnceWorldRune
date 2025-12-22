@@ -1,6 +1,5 @@
 class UpgradeOptimizer {
     constructor(totalRunes) {
-        this.totalRunes = totalRunes;
         this.limit = totalRunes * 0.9;
         this.stages = [];
         this.init();
@@ -9,12 +8,12 @@ class UpgradeOptimizer {
     init() {
         for (let n = 2; n <= 100; n++) {
             let baseP = (101 - n) / 100;
-            let stageOptions = [];
+            let options = [];
             for (let k = 0; k <= 10; k++) {
                 let nextP = Math.min(1.0, baseP + (k * 0.1));
                 if (k > 0 && baseP + (k - 1) * 0.1 >= 0.9) nextP = 1.0;
-
-                stageOptions.push({
+                
+                options.push({
                     runes: k,
                     material: 1 / nextP,
                     runeCost: k === 0 ? 0 : k / nextP,
@@ -24,7 +23,7 @@ class UpgradeOptimizer {
                 });
                 if (nextP === 1.0) break;
             }
-            this.stages.push(stageOptions);
+            this.stages.push(options);
         }
     }
 
@@ -33,11 +32,12 @@ class UpgradeOptimizer {
         let currentTotalRuneCost = 0;
 
         while (true) {
-            let bestUpgrade = null;
+            let bestStep = null;
 
             for (let i = 0; i < this.stages.length; i++) {
                 let current = this.stages[i][currentPlanIdx[i]];
                 
+                // 全ての「今より枚数を増やすパターン」をチェック
                 for (let nextIdx = currentPlanIdx[i] + 1; nextIdx < this.stages[i].length; nextIdx++) {
                     let next = this.stages[i][nextIdx];
                     let costDiff = next.runeCost - current.runeCost;
@@ -45,27 +45,26 @@ class UpgradeOptimizer {
                     let efficiency = savingDiff / costDiff;
 
                     if (currentTotalRuneCost + costDiff <= this.limit) {
-                        if (!bestUpgrade || efficiency > bestUpgrade.efficiency) {
-                            bestUpgrade = { stageIdx: i, nextIdx: nextIdx, costDiff: costDiff, efficiency: efficiency };
+                        if (!bestStep || efficiency > bestStep.efficiency) {
+                            bestStep = { stageIdx: i, nextIdx: nextIdx, costDiff: costDiff, efficiency: efficiency };
                         }
                     }
                 }
             }
 
-            if (!bestUpgrade) break;
-            currentTotalRuneCost += bestUpgrade.costDiff;
-            currentPlanIdx[bestUpgrade.stageIdx] = bestUpgrade.nextIdx;
+            if (!bestStep) break;
+            currentTotalRuneCost += bestStep.costDiff;
+            currentPlanIdx[bestStep.stageIdx] = bestStep.nextIdx;
         }
 
-        let finalPlan = currentPlanIdx.map((idx, i) => this.stages[i][idx]).filter(p => p.runes > 0);
-        let totalMatExp = 0;
-        // 石板を使わない段階も含めて、全100段階の使用素材期待値を合算
+        let plan = currentPlanIdx.map((idx, i) => this.stages[i][idx]).filter(p => p.runes > 0);
+        
+        // 全100段階の期待値を合算（石板なしの段階も含む）
+        let totalMatExp = 1; // 1回目(100%)の分
         for (let i = 0; i < this.stages.length; i++) {
             totalMatExp += this.stages[i][currentPlanIdx[i]].material;
         }
-        // 1回目の100%成功分(1個)を追加
-        totalMatExp += 1;
 
-        return { plan: finalPlan, totalCost: currentTotalRuneCost, totalMatExp: totalMatExp };
+        return { plan: plan, totalCost: currentTotalRuneCost, totalMatExp: totalMatExp };
     }
 }
