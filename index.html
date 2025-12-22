@@ -30,57 +30,63 @@
 
 <script>
 function runSimulation() {
+    // ユーザーが入力した石板の「現物」の数
     const totalRunes = parseInt(document.getElementById('runeInput').value) || 0;
-    const runeLimit = totalRunes * 0.9;
+    // 期待値ではなく、実際に「投入する石板の合計枚数」で管理する
+    const runeLimit = totalRunes; 
 
     let summaryMap = {};
-    let totalExpectedRunes = 0;
+    let spentRunes = 0;
     let totalSaved = 0;
 
-    // 石板1枚ごとに「今、どこに使うのが最も素材の期待値を下げるか」を greedily（どん欲）に選択
-    while (totalExpectedRunes < runeLimit) {
-        let bestEfficiency = -1;
+    // 石板を1枚ずつ、最も「素材節約の期待値」が高い場所に放り込む
+    while (spentRunes < runeLimit) {
+        let bestSaving = -1;
         let bestStage = -1;
-        let bestCost = 0;
-        let bestSaving = 0;
 
-        for (let n = 2; n <= 100; n++) {
+        for (let n = 100; n >= 2; n--) { // 100回目(1%)から優先的にチェック
             let baseP = (101 - n) / 100;
             let currentNum = summaryMap[n] || 0;
             
-            // 現在の確率
-            let currentP = Math.min(1.0, baseP + (currentNum * 0.1));
-            // 特殊処理：91%以上で既に石板を使っているなら実質100%確定状態
-            if (currentNum > 0 && (baseP + (currentNum-1)*0.1 >= 0.90)) currentP = 1.0;
-            
+            // すでに100%に達しているならスキップ
+            let currentP = baseP + (currentNum * 0.1);
+            if (currentNum > 0 && (baseP + (currentNum - 1) * 0.1 >= 0.9)) currentP = 1.0;
             if (currentP >= 1.0) continue;
 
             // 次の1枚を使った時の確率
             let nextP = Math.min(1.0, baseP + ((currentNum + 1) * 0.1));
-            // 91%以上に到達するなら100%（端数分）として処理
-            if (baseP + (currentNum * 0.1) >= 0.90) nextP = 1.0;
+            if (baseP + (currentNum * 0.1) >= 0.9) nextP = 1.0;
 
-            let materialSaving = (1 / currentP) - (1 / nextP);
-            let expectedRuneCost = 1 / nextP;
-            let efficiency = materialSaving / expectedRuneCost;
+            // 石板1枚あたりの素材節約量 = (1/今の確率) - (1/次の確率)
+            let saving = (1 / currentP) - (1 / nextP);
 
-            if (efficiency > bestEfficiency) {
-                bestEfficiency = efficiency;
+            if (saving > bestSaving) {
+                bestSaving = saving;
                 bestStage = n;
-                bestCost = expectedRuneCost;
-                bestSaving = materialSaving;
             }
         }
 
-        if (bestStage === -1 || (totalExpectedRunes + bestCost > runeLimit)) break;
+        if (bestStage === -1 || spentRunes + 1 > runeLimit) break;
 
         summaryMap[bestStage] = (summaryMap[bestStage] || 0) + 1;
-        totalExpectedRunes += bestCost;
+        spentRunes += 1;
         totalSaved += bestSaving;
     }
 
+    // 表示用の期待値計算（石板が失敗して消える分を考慮）
+    let expectedRuneSpent = 0;
+    for (let stage in summaryMap) {
+        let baseP = (101 - stage) / 100;
+        let num = summaryMap[stage];
+        // 各段階、最終的な確率 nextP で石板が消費される
+        let finalP = Math.min(1.0, baseP + (num * 0.1));
+        if (num > 0 && (baseP + (num - 1) * 0.1 >= 0.9)) finalP = 1.0;
+        expectedRuneSpent += num / finalP;
+    }
+
     document.getElementById('summaryArea').innerHTML = `
-        石板消費期待値合計: <b>${totalExpectedRunes.toFixed(1)} 枚</b> (上限: ${runeLimit.toFixed(1)})<br>
+        投入石板の総数: <b>${spentRunes} 枚</b><br>
+        (石板消費の期待値: 約 ${expectedRuneSpent.toFixed(1)} 枚)<br>
         素材節約期待値: <b>約 ${totalSaved.toFixed(1)} 個分</b>
     `;
 
@@ -88,10 +94,10 @@ function runSimulation() {
     for (let n = 100; n >= 2; n--) {
         if (summaryMap[n]) {
             let base = (101 - n);
-            let finalP = Math.min(100, (base + (summaryMap[n] * 10)));
-            // 91%以上からさらに1枚使った場合は100%表示
-            if (summaryMap[n] > 0 && (base + (summaryMap[n]-1)*10 >= 90)) finalP = 100;
-            html += `<tr><td>${n}回目</td><td>${base}%</td><td><b style="color:#ff4444;">${summaryMap[n]} 枚</b></td><td>${finalP}%</td></tr>`;
+            let num = summaryMap[n];
+            let finalP = Math.min(100, base + (num * 10));
+            if (num > 0 && (base + (num - 1) * 10 >= 90)) finalP = 100;
+            html += `<tr><td>${n}回目</td><td>${base}%</td><td><b style="color:#ff4444;">${num} 枚</b></td><td>${finalP}%</td></tr>`;
         }
     }
     html += "</table>";
