@@ -8,60 +8,72 @@ class UpgradeOptimizer {
     init() {
         for (let n = 100; n >= 2; n--) {
             let baseP = (101 - n) / 100;
-            this.stages.push({ stageNum: n, baseP: baseP });
+            this.stages.push({ stageNum: n, baseP: baseP, runes: 0, prob: baseP, runeCost: 0 });
         }
     }
 
     calculate() {
-        let currentPlan = this.stages.map(s => ({
-            runes: 0, runeCost: 0, prob: s.baseP, stageNum: s.stageNum, baseP: s.baseP, material: 1 / s.baseP
-        }));
+        let currentTotalRuneCost = 0;
 
-        let totalRuneCost = 0;
+        // --- 優先順位リスト（アクションのキュー）を作成 ---
+        let actionQueue = [];
 
-        while (true) {
-            let bestAction = null;
+        // 1. まず各段階を「91%以上」にするアクションを100回目から順に並べる
+        for (let s of this.stages) {
+            let targetRunes = Math.ceil((0.91 - s.baseP) * 10);
+            if (targetRunes > 10) targetRunes = 10;
+            let targetP = Math.min(1.0, s.baseP + (targetRunes * 0.1));
+            if (targetRunes === 10) targetP = 1.0;
 
-            for (let i = 0; i < currentPlan.length; i++) {
-                let current = currentPlan[i];
-                if (current.runes >= 10) continue;
+            actionQueue.push({
+                stageNum: s.stageNum,
+                type: 'FIRST_91',
+                runes: targetRunes,
+                prob: targetP,
+                cost: targetRunes / targetP
+            });
+        }
 
-                // 順番ルール: 前の段階が91%以上になっていないなら、この段階は検討しない
-                if (i > 0 && currentPlan[i-1].prob < 0.91) break;
+        // 2. 次に「すでに91%にした場所を100%にする」アクションを100回目から順に並べる
+        for (let s of this.stages) {
+            let currentRunes = Math.ceil((0.91 - s.baseP) * 10);
+            if (currentRunes >= 10) continue; // すでに100%なら不要
 
-                // 選択肢1: まだ使っていないなら、91%まで一気に投入（セット）
-                // 選択肢2: 既に91%以上なら、1枚ずつ追加して100%を目指す
-                let nextRunes = (current.runes === 0) ? Math.ceil((0.91 - current.baseP) * 10) : current.runes + 1;
-                if (nextRunes > 10) nextRunes = 10;
+            actionQueue.push({
+                stageNum: s.stageNum,
+                type: 'FINISH_100',
+                runes: 10,
+                prob: 1.0,
+                cost: 10 / 1.0
+            });
+        }
 
-                let nextP = (nextRunes === 10) ? 1.0 : Math.min(1.0, current.baseP + (nextRunes * 0.1));
-                let costForNext = nextRunes / nextP;
-                let costDiff = costForNext - current.runeCost;
-                let savingDiff = current.material - (1 / nextP);
-                let efficiency = savingDiff / costDiff;
+        // --- キューを順番に実行（予算が尽きるまで） ---
+        let activePlan = {};
 
-                if (totalRuneCost + costDiff <= this.limit) {
-                    if (!bestAction || efficiency > bestAction.efficiency) {
-                        bestAction = { idx: i, runes: nextRunes, cost: costForNext, prob: nextP, efficiency: efficiency, costDiff: costDiff };
-                    }
-                }
+        for (let action of actionQueue) {
+            let stage = this.stages.find(s => s.stageNum === action.stageNum);
+            let costDiff = action.cost - stage.runeCost;
+
+            if (currentTotalRuneCost + costDiff <= this.limit) {
+                currentTotalRuneCost += costDiff;
+                stage.runes = action.runes;
+                stage.runeCost = action.cost;
+                stage.prob = action.prob;
+                activePlan[stage.stageNum] = stage;
+            } else {
+                // 予算オーバー：この時点で「一切の石板使用」を中止
+                break; 
             }
-
-            if (!bestAction) break;
-
-            totalRuneCost += bestAction.costDiff;
-            currentPlan[bestAction.idx].runes = bestAction.runes;
-            currentPlan[bestAction.idx].runeCost = bestAction.cost;
-            currentPlan[bestAction.idx].prob = bestAction.prob;
-            currentPlan[bestAction.idx].material = 1 / bestAction.prob;
         }
 
-        let plan = currentPlan.filter(p => p.runes > 0);
-        let totalMatExp = 1; 
-        for (let i = 0; i < currentPlan.length; i++) {
-            totalMatExp += (currentPlan[i].runes > 0 ? currentPlan[i].material : (1 / currentPlan[i].baseP));
+        // 結果の整形
+        let plan = this.stages.filter(s => s.runes > 0);
+        let totalMatExp = 1; // 1回目
+        for (let s of this.stages) {
+            totalMatExp += (1 / s.prob);
         }
 
-        return { plan: plan, totalCost: totalRuneCost, totalMatExp: totalMatExp };
+        return { plan: plan, totalCost: currentTotalRuneCost, totalMatExp: totalMatExp };
     }
 }
