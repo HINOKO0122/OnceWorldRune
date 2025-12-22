@@ -16,7 +16,7 @@ class UpgradeOptimizer {
         let allActions = [];
 
         for (let s of this.stages) {
-            // STEP 1: 91%セットにする投資
+            // STEP 1: 91%以上にするための「最小セット」
             let firstRunes = Math.ceil((0.91 - s.baseP) * 10);
             if (firstRunes < 0) firstRunes = 0;
             if (firstRunes > 10) firstRunes = 10;
@@ -30,24 +30,24 @@ class UpgradeOptimizer {
                     stageNum: s.stageNum,
                     type: 'SET',
                     efficiency: firstSaving / firstCost,
-                    costToApply: firstCost, // この投資に必要な石板期待値
+                    costToApply: firstCost,
                     targetRune: firstRunes,
                     targetProb: firstProb
                 });
             }
 
-            // STEP 2: さらに100%まで引き上げる「追加投資」
+            // STEP 2: 100%への「追加投資」
+            // STEP 1で100%に届かなかった場合のみ計算
             if (firstProb < 1.0) {
                 let secondProb = 1.0;
-                let secondCost = 10 / 1.0; // 100%時の総期待値は10
-                
-                let costDiff = secondCost - firstCost; // 91%から100%にするための「追加コスト」
-                let savingDiff = (1 / firstProb) - 1.0; // 91%から100%にすることでの「追加節約量」
+                let secondCost = 10 / 1.0;
+                let costDiff = secondCost - firstCost;
+                let savingDiff = (1 / firstProb) - 1.0;
 
                 allActions.push({
                     stageNum: s.stageNum,
                     type: 'FINISH',
-                    efficiency: savingDiff / costDiff, // 純粋な追加投資の効率
+                    efficiency: savingDiff / costDiff,
                     costToApply: costDiff,
                     targetRune: 10,
                     targetProb: 1.0
@@ -55,35 +55,48 @@ class UpgradeOptimizer {
             }
         }
 
-        // 全てのアクションを「1石板期待値あたりの素材節約量」で厳密にソート
-        allActions.sort((a, b) => b.efficiency - a.efficiency);
+        // 全アクションを「効率（節約量/石板期待値）」で降順ソート
+        // 数値が同じなら stageNum が大きい（確率が低い）方を優先
+        allActions.sort((a, b) => {
+            if (Math.abs(b.efficiency - a.efficiency) < 1e-9) {
+                return b.stageNum - a.stageNum;
+            }
+            return b.efficiency - a.efficiency;
+        });
 
         let currentTotalRuneCost = 0;
-        let activePlan = this.stages.map(s => ({...s, runes: 0, currentProb: s.baseP, currentCost: 0}));
+        let activePlan = this.stages.map(s => ({...s, currentRunes: 0, currentProb: s.baseP, currentCost: 0}));
 
         for (let action of allActions) {
             let stage = activePlan.find(s => s.stageNum === action.stageNum);
 
-            // 依存関係：SETが未適用の状態でFINISH（追加投資）はできない
-            if (action.type === 'FINISH' && stage.runes === 0) continue;
-            // すでにそれ以上の状態ならスキップ
-            if (action.targetRune <= stage.runes) continue;
+            // 依存関係：SETがまだなのにFINISHはできない
+            if (action.type === 'FINISH' && stage.currentRunes === 0) continue;
+            // すでにそれ以上の枚数が割り当て済みならスキップ
+            if (action.targetRune <= stage.currentRunes) continue;
 
             if (currentTotalRuneCost + action.costToApply <= this.limit) {
                 currentTotalRuneCost += action.costToApply;
-                stage.runes = action.targetRune;
-                stage.prob = action.targetProb;
-                stage.material = 1 / stage.prob;
+                stage.currentRunes = action.targetRune;
+                stage.currentProb = action.targetProb;
+                stage.material = 1 / stage.currentProb;
             } else {
-                // 予算不足：ここで即時終了（hinoko0122ルール）
+                // 予算オーバー：以降の全アクションを即終了（hinoko0122ルール）
                 break;
             }
         }
 
-        let plan = activePlan.filter(s => s.runes > 0).sort((a, b) => b.stageNum - a.stageNum);
+        let plan = activePlan.filter(s => s.currentRunes > 0).map(s => ({
+            stageNum: s.stageNum,
+            baseP: s.baseP,
+            runes: s.currentRunes,
+            prob: s.currentProb,
+            material: s.material
+        })).sort((a, b) => b.stageNum - a.stageNum);
+
         let totalMatExp = 1; 
         for (let s of activePlan) {
-            totalMatExp += (s.runes > 0 ? (1/s.prob) : (1/s.baseP));
+            totalMatExp += s.material;
         }
 
         return { plan: plan, totalCost: currentTotalRuneCost, totalMatExp: totalMatExp };
