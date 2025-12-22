@@ -2,97 +2,69 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>装備強化MAX・最適ルーン</title>
+    <title>装備強化・究極最適化ツール</title>
     <style>
-        body { font-family: sans-serif; background: #1a1a1a; color: #eee; max-width: 800px; margin: 0 auto; padding: 20px; }
-        .card { background: #2a2a2a; padding: 20px; border-radius: 10px; border: 1px solid #444; }
-        h1 { color: #ff4444; text-align: center; border-bottom: 2px solid #ff4444; }
-        .input-area { background: #333; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center; }
-        input { font-size: 20px; padding: 10px; width: 120px; }
-        button { font-size: 20px; padding: 10px 20px; background: #ff4444; color: white; border: none; cursor: pointer; }
-        .summary-box { background: #1e3a5f; padding: 15px; border-radius: 5px; margin-bottom: 15px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #222; }
-        th, td { border: 1px solid #444; padding: 12px; text-align: center; }
-        th { background: #444; color: #ff4444; }
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #121212; color: #e0e0e0; padding: 20px; }
+        .container { max-width: 900px; margin: 0 auto; background: #1e1e1e; padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        h1 { color: #ff4b2b; text-align: center; font-size: 2em; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 10px; }
+        .input-group { text-align: center; margin-bottom: 30px; }
+        input { background: #333; border: 1px solid #444; color: #fff; padding: 12px; font-size: 18px; border-radius: 5px; width: 150px; margin-right: 10px; }
+        button { background: linear-gradient(135deg, #ff4b2b 0%, #ff416c 100%); border: none; color: white; padding: 12px 30px; font-size: 18px; border-radius: 5px; cursor: pointer; transition: 0.3s; }
+        button:hover { transform: translateY(-2px); opacity: 0.9; }
+        .result-header { background: #252525; padding: 20px; border-radius: 10px; border-left: 5px solid #ff4b2b; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th { background: #333; color: #ff4b2b; padding: 15px; text-align: center; }
+        td { padding: 12px; border-bottom: 1px solid #333; text-align: center; }
+        .highlight { color: #ff4b2b; font-weight: bold; }
     </style>
 </head>
-<body onload="runSimulation()">
-<div class="card">
-    <h1>装備強化MAX・最適ルーン</h1>
-    <div class="input-area">
-        <p>用意したルーン石板の総数</p>
-        <input type="number" id="runeInput" value="100">
-        <button onclick="runSimulation()">計算！</button>
+<body>
+    <div class="container">
+        <h1>装備強化・究極最適化</h1>
+        <div class="input-group">
+            <input type="number" id="runeCount" value="100" min="1">
+            <button onclick="optimize()">最適化計算を実行</button>
+        </div>
+        <div id="results"></div>
     </div>
-    <div id="summaryArea" class="summary-box"></div>
-    <div id="output"></div>
-</div>
 
-<script>
-function runSimulation() {
-    const totalRunes = parseInt(document.getElementById('runeInput').value) || 0;
-    const runeLimit = totalRunes * 0.9;
+    <script src="logic.js"></script>
+    <script>
+        function optimize() {
+            const count = document.getElementById('runeCount').value;
+            const optimizer = new UpgradeOptimizer(count);
+            const result = optimizer.calculate();
 
-    let bestPlansPerStage = [];
+            let html = `
+                <div class="result-header">
+                    <p>石板消費期待値合計: <span class="highlight">${result.totalCost.toFixed(2)} 枚</span> / 上限 ${optimizer.limit.toFixed(2)}</p>
+                    <p>素材節約期待値: <span class="highlight">約 ${result.totalSaving.toFixed(1)} 個分</span></p>
+                </div>
+                <table>
+                    <tr><th>強化段階</th><th>元の確率</th><th>投入石板</th><th>強化後確率</th></tr>
+            `;
 
-    for (let n = 2; n <= 100; n++) {
-        let baseP = (101 - n) / 100;
-        let bestEff = -1;
-        let bestStagePlan = null;
+            // 段階が重い順（100回目〜）に表示
+            result.plan.reverse().forEach(p => {
+                // 逆算して何回目か特定
+                let stageNum = Math.round(101 - ((1/p.material + p.saving)**-1 * 100)); 
+                // 正確な表示のために再計算
+                let baseP = (1 / (1 / p.prob + p.saving));
+                let stageDisplay = Math.round(101 - baseP * 100);
 
-        for (let k = 1; k <= 10; k++) {
-            let nextP = Math.min(1.0, baseP + (k * 0.1));
-            if (baseP + (k-1)*0.1 >= 0.9) nextP = 1.0;
+                html += `
+                    <tr>
+                        <td>${stageDisplay}回目</td>
+                        <td>${Math.round(baseP * 100)}%</td>
+                        <td class="highlight">${p.runes} 枚</td>
+                        <td>${Math.round(p.prob * 100)}%</td>
+                    </tr>
+                `;
+            });
 
-            let materialSaving = (1 / baseP) - (1 / nextP);
-            let expectedRuneCost = k / nextP;
-            let efficiency = materialSaving / expectedRuneCost;
-
-            if (efficiency > bestEff) {
-                bestEff = efficiency;
-                bestStagePlan = {
-                    stage: n,
-                    numRunes: k,
-                    efficiency: efficiency,
-                    cost: expectedRuneCost,
-                    saving: materialSaving,
-                    finalP: nextP
-                };
-            }
-            if (nextP === 1.0) break;
+            html += `</table>`;
+            document.getElementById('results').innerHTML = html;
         }
-        bestPlansPerStage.push(bestStagePlan);
-    }
-
-    bestPlansPerStage.sort((a, b) => b.efficiency - a.efficiency);
-
-    let summaryMap = {};
-    let totalRuneCost = 0;
-    let totalMatSaved = 0;
-
-    for (let plan of bestPlansPerStage) {
-        if (totalRuneCost + plan.cost <= runeLimit) {
-            summaryMap[plan.stage] = plan;
-            totalRuneCost += plan.cost;
-            totalMatSaved += plan.saving;
-        }
-    }
-
-    document.getElementById('summaryArea').innerHTML = `
-        石板消費期待値合計: <b>${totalRuneCost.toFixed(1)} 枚</b> (上限: ${runeLimit.toFixed(1)})<br>
-        素材節約期待値: <b>約 ${totalMatSaved.toFixed(1)} 個分</b>
-    `;
-
-    let html = "<table><tr><th>強化回数</th><th>素の確率</th><th>石板投入数</th><th>強化後の確率</th></tr>";
-    for (let n = 100; n >= 2; n--) {
-        if (summaryMap[n]) {
-            let p = summaryMap[n];
-            html += `<tr><td>${n}回目</td><td>${(101-n)}%</td><td><b style="color:#ff4444;">${p.numRunes} 枚</b></td><td>${Math.round(p.finalP * 100)}%</td></tr>`;
-        }
-    }
-    html += "</table>";
-    document.getElementById('output').innerHTML = html;
-}
-</script>
+    </script>
 </body>
 </html>
