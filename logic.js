@@ -16,7 +16,7 @@ class UpgradeOptimizer {
         let allActions = [];
 
         for (let s of this.stages) {
-            // STEP 1: 91%以上に持っていくための「セット」
+            // STEP 1: 91%セットにする投資
             let firstRunes = Math.ceil((0.91 - s.baseP) * 10);
             if (firstRunes < 0) firstRunes = 0;
             if (firstRunes > 10) firstRunes = 10;
@@ -29,23 +29,25 @@ class UpgradeOptimizer {
                 allActions.push({
                     stageNum: s.stageNum,
                     type: 'SET',
-                    efficiency: firstSaving / firstCost, // 素材節約量 / 石板期待値
-                    costToApply: firstCost,
+                    efficiency: firstSaving / firstCost,
+                    costToApply: firstCost, // この投資に必要な石板期待値
                     targetRune: firstRunes,
                     targetProb: firstProb
                 });
             }
 
-            // STEP 2: 100%への引き上げ
+            // STEP 2: さらに100%まで引き上げる「追加投資」
             if (firstProb < 1.0) {
-                let cost100 = 10 / 1.0;
-                let costDiff = cost100 - firstCost; // 追加分の期待値コスト
-                let savingDiff = (1 / firstProb) - 1.0; // 追加分の素材節約量
+                let secondProb = 1.0;
+                let secondCost = 10 / 1.0; // 100%時の総期待値は10
+                
+                let costDiff = secondCost - firstCost; // 91%から100%にするための「追加コスト」
+                let savingDiff = (1 / firstProb) - 1.0; // 91%から100%にすることでの「追加節約量」
 
                 allActions.push({
                     stageNum: s.stageNum,
                     type: 'FINISH',
-                    efficiency: savingDiff / costDiff, // 純粋に「追加投資分」の利回り
+                    efficiency: savingDiff / costDiff, // 純粋な追加投資の効率
                     costToApply: costDiff,
                     targetRune: 10,
                     targetProb: 1.0
@@ -53,17 +55,19 @@ class UpgradeOptimizer {
             }
         }
 
-        // 全アクションを「その投資単体での効率」で降順ソート
+        // 全てのアクションを「1石板期待値あたりの素材節約量」で厳密にソート
         allActions.sort((a, b) => b.efficiency - a.efficiency);
 
         let currentTotalRuneCost = 0;
-        let activePlan = this.stages.map(s => ({...s, currentCost: 0}));
+        let activePlan = this.stages.map(s => ({...s, runes: 0, currentProb: s.baseP, currentCost: 0}));
 
         for (let action of allActions) {
             let stage = activePlan.find(s => s.stageNum === action.stageNum);
 
-            // 依存関係：SETがまだなのにFINISHはできない
+            // 依存関係：SETが未適用の状態でFINISH（追加投資）はできない
             if (action.type === 'FINISH' && stage.runes === 0) continue;
+            // すでにそれ以上の状態ならスキップ
+            if (action.targetRune <= stage.runes) continue;
 
             if (currentTotalRuneCost + action.costToApply <= this.limit) {
                 currentTotalRuneCost += action.costToApply;
@@ -71,7 +75,7 @@ class UpgradeOptimizer {
                 stage.prob = action.targetProb;
                 stage.material = 1 / stage.prob;
             } else {
-                // 予算オーバー：以降の全リストは適用しない
+                // 予算不足：ここで即時終了（hinoko0122ルール）
                 break;
             }
         }
@@ -79,7 +83,7 @@ class UpgradeOptimizer {
         let plan = activePlan.filter(s => s.runes > 0).sort((a, b) => b.stageNum - a.stageNum);
         let totalMatExp = 1; 
         for (let s of activePlan) {
-            totalMatExp += s.material;
+            totalMatExp += (s.runes > 0 ? (1/s.prob) : (1/s.baseP));
         }
 
         return { plan: plan, totalCost: currentTotalRuneCost, totalMatExp: totalMatExp };
