@@ -8,55 +8,52 @@ class UpgradeOptimizer {
     init() {
         for (let n = 100; n >= 2; n--) {
             let baseP = (101 - n) / 100;
-            this.stages.push({ stageNum: n, baseP: baseP, runes: 0, prob: baseP, material: 1 / baseP });
+            this.stages.push({ stageNum: n, baseP: baseP, currentRunes: 0, currentProb: baseP });
         }
     }
 
     calculate() {
         let executionQueue = [];
 
-        // --- 手順1: 100回目から順に「91%セット」をリストに追加 ---
+        // --- 手順1: 全員を「あと1枚で100%」の状態まで上げる ---
+        // ※ここでは絶対に100%にはせず、最高でも「91%〜99.9%」で止める
         for (let s of this.stages) {
-            let runesTo91 = Math.ceil((0.91 - s.baseP) * 10);
-            if (runesTo91 < 0) runesTo91 = 0;
-            if (runesTo91 > 10) runesTo91 = 10;
-            let prob91 = (runesTo91 === 10) ? 1.0 : Math.min(1.0, s.baseP + (runesTo91 * 0.1));
+            let runesTo9x = Math.ceil((0.91 - s.baseP) * 10);
+            if (runesTo9x < 0) runesTo9x = 0;
+            
+            // 重要：もしその枚数で100%に届いてしまうなら、あえて1枚減らす
+            if (s.baseP + (runesTo9x * 0.1) >= 0.999) {
+                runesTo9x = Math.max(0, runesTo9x - 1);
+            }
 
-            if (runesTo91 > 0) {
+            let prob = s.baseP + (runesTo9x * 0.1);
+
+            if (runesTo9x > 0) {
                 executionQueue.push({
                     stageNum: s.stageNum,
-                    type: 'SET_91',
-                    targetRune: runesTo91,
-                    targetProb: prob91
+                    targetRune: runesTo91, // 実際は100%未満の枚数
+                    targetProb: prob
                 });
             }
         }
 
-        // --- 手順2: 100回目から順に「100%への引き上げ」をリストに追加 ---
+        // --- 手順2: 100回目から順に「10枚投入して100%」にする ---
+        // ここで初めて100%のアクションを解禁する
         for (let s of this.stages) {
-            let runesTo91 = Math.ceil((0.91 - s.baseP) * 10);
-            // 91%セットの時点で100%に届かなかった場合のみ追加
-            if (runesTo91 >= 0 && runesTo91 < 10) {
-                executionQueue.push({
-                    stageNum: s.stageNum,
-                    type: 'FINISH_100',
-                    targetRune: 10,
-                    targetProb: 1.0
-                });
-            }
+            executionQueue.push({
+                stageNum: s.stageNum,
+                targetRune: 10,
+                targetProb: 1.0
+            });
         }
 
-        // --- 実行 ---
         let currentTotalRuneCost = 0;
-        let activePlan = this.stages.map(s => ({...s, currentRunes: 0, currentProb: s.baseP}));
 
         for (let action of executionQueue) {
-            let stage = activePlan.find(s => s.stageNum === action.stageNum);
+            let stage = this.stages.find(s => s.stageNum === action.stageNum);
 
-            // 既にその枚数以上ならスキップ
             if (action.targetRune <= stage.currentRunes) continue;
 
-            // 追加で必要な期待値コストを計算
             let currentCost = stage.currentRunes === 0 ? 0 : (stage.currentRunes / stage.currentProb);
             let nextCost = action.targetRune / action.targetProb;
             let costDiff = nextCost - currentCost;
@@ -65,18 +62,16 @@ class UpgradeOptimizer {
                 currentTotalRuneCost += costDiff;
                 stage.currentRunes = action.targetRune;
                 stage.currentProb = action.targetProb;
-                stage.material = 1 / stage.currentProb;
             } else {
-                // 予算オーバー：ここで即座に終了。余った予算で後ろのアクションを探さない。
+                // 予算オーバーなら即終了
                 break;
             }
         }
 
-        // 結果を整形
-        let plan = activePlan.filter(s => s.currentRunes > 0).sort((a, b) => b.stageNum - a.stageNum);
+        let plan = this.stages.filter(s => s.currentRunes > 0).sort((a, b) => b.stageNum - a.stageNum);
         let totalMatExp = 1; 
-        for (let s of activePlan) {
-            totalMatExp += s.material;
+        for (let s of this.stages) {
+            totalMatExp += (1 / s.currentProb);
         }
 
         return { plan: plan, totalCost: currentTotalRuneCost, totalMatExp: totalMatExp };
