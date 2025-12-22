@@ -13,79 +13,77 @@ class UpgradeOptimizer {
     }
 
     calculate() {
-        let allActions = [];
+        // --- 1. 絶対に守りたい「実行順序」のリストを作る ---
+        let strategyQueue = [];
 
+        // ステップA: 100回目から順に「91%〜100%」まで持っていく
         for (let s of this.stages) {
-            // STEP 1: 91%以上にするための「最小セット」
-            let firstRunes = Math.ceil((0.91 - s.baseP) * 10);
-            if (firstRunes < 0) firstRunes = 0;
-            if (firstRunes > 10) firstRunes = 10;
+            let runes = Math.ceil((0.91 - s.baseP) * 10);
+            if (runes < 0) runes = 0;
+            if (runes > 10) runes = 10;
+            let prob = (runes === 10) ? 1.0 : Math.min(1.0, s.baseP + (runes * 0.1));
 
-            let firstProb = (firstRunes === 10) ? 1.0 : Math.min(1.0, s.baseP + (firstRunes * 0.1));
-            let firstCost = firstRunes / firstProb;
-            let firstSaving = (1 / s.baseP) - (1 / firstProb);
-
-            if (firstRunes > 0) {
-                allActions.push({
+            if (runes > 0) {
+                strategyQueue.push({
                     stageNum: s.stageNum,
-                    type: 'SET',
-                    efficiency: firstSaving / firstCost,
-                    costToApply: firstCost,
-                    targetRune: firstRunes,
-                    targetProb: firstProb
-                });
-            }
-
-            // STEP 2: 100%への「追加投資」
-            // STEP 1で100%に届かなかった場合のみ計算
-            if (firstProb < 1.0) {
-                let secondProb = 1.0;
-                let secondCost = 10 / 1.0;
-                let costDiff = secondCost - firstCost;
-                let savingDiff = (1 / firstProb) - 1.0;
-
-                allActions.push({
-                    stageNum: s.stageNum,
-                    type: 'FINISH',
-                    efficiency: savingDiff / costDiff,
-                    costToApply: costDiff,
-                    targetRune: 10,
-                    targetProb: 1.0
+                    type: 'SET_91',
+                    targetRune: runes,
+                    targetProb: prob,
+                    // 効率（ソートが必要になった場合のため一応計算）
+                    efficiency: ((1 / s.baseP) - (1 / prob)) / (runes / prob)
                 });
             }
         }
 
-        // 全アクションを「効率（節約量/石板期待値）」で降順ソート
-        // 数値が同じなら stageNum が大きい（確率が低い）方を優先
-        allActions.sort((a, b) => {
-            if (Math.abs(b.efficiency - a.efficiency) < 1e-9) {
-                return b.stageNum - a.stageNum;
+        // ステップB: 100回目から順に「残りの1枚を足して100%」にする
+        for (let s of this.stages) {
+            let currentRunes = Math.ceil((0.91 - s.baseP) * 10);
+            if (currentRunes >= 0 && currentRunes < 10) {
+                let currentProb = Math.min(1.0, s.baseP + (currentRunes * 0.1));
+                let cost91 = currentRunes / currentProb;
+                let cost100 = 10 / 1.0;
+                
+                strategyQueue.push({
+                    stageNum: s.stageNum,
+                    type: 'FINISH_100',
+                    targetRune: 10,
+                    targetProb: 1.0,
+                    efficiency: ((1 / currentProb) - 1.0) / (cost100 - cost91)
+                });
             }
-            return b.efficiency - a.efficiency;
-        });
+        }
 
+        // --- 2. この順番で石板が尽きるまで適用する ---
+        // ※ここではあえて sort() を使わず、作成したキューの順番を最優先します
+        // ただし、もし「節約効率」を優先したい場合は strategyQueue.sort() を有効にします
+        // 今回は「90回目より80回目が先に来るバグ」を殺すため、このまま進みます。
+        
         let currentTotalRuneCost = 0;
-        let activePlan = this.stages.map(s => ({...s, currentRunes: 0, currentProb: s.baseP, currentCost: 0}));
+        let activePlan = this.stages.map(s => ({...s, currentRunes: 0, currentProb: s.baseP}));
 
-        for (let action of allActions) {
+        for (let action of strategyQueue) {
             let stage = activePlan.find(s => s.stageNum === action.stageNum);
 
-            // 依存関係：SETがまだなのにFINISHはできない
-            if (action.type === 'FINISH' && stage.currentRunes === 0) continue;
-            // すでにそれ以上の枚数が割り当て済みならスキップ
+            // 既にそのアクション以上の状態ならスキップ（重複防止）
             if (action.targetRune <= stage.currentRunes) continue;
 
-            if (currentTotalRuneCost + action.costToApply <= this.limit) {
-                currentTotalRuneCost += action.costToApply;
+            // このアクションを追加で適用するのに必要な「追加期待値コスト」
+            let currentCost = stage.currentRunes === 0 ? 0 : (stage.currentRunes / stage.currentProb);
+            let nextCost = action.targetRune / action.targetProb;
+            let costDiff = nextCost - currentCost;
+
+            if (currentTotalRuneCost + costDiff <= this.limit) {
+                currentTotalRuneCost += costDiff;
                 stage.currentRunes = action.targetRune;
                 stage.currentProb = action.targetProb;
                 stage.material = 1 / stage.currentProb;
             } else {
-                // 予算オーバー：以降の全アクションを即終了（hinoko0122ルール）
+                // 予算オーバー：ここで即座に終了。余った石板は使わない。
                 break;
             }
         }
 
+        // --- 3. 結果の出力準備 ---
         let plan = activePlan.filter(s => s.currentRunes > 0).map(s => ({
             stageNum: s.stageNum,
             baseP: s.baseP,
@@ -94,7 +92,7 @@ class UpgradeOptimizer {
             material: s.material
         })).sort((a, b) => b.stageNum - a.stageNum);
 
-        let totalMatExp = 1; 
+        let totalMatExp = 1; // 1回目分
         for (let s of activePlan) {
             totalMatExp += s.material;
         }
