@@ -5,12 +5,12 @@
     <title>装備強化MAX・最適ルーン</title>
     <style>
         body { font-family: sans-serif; background: #1a1a1a; color: #eee; max-width: 800px; margin: 0 auto; padding: 20px; }
-        .card { background: #2a2a2a; padding: 20px; border-radius: 10px; border: 1px solid #444; }
+        .card { background: #2a2a2a; padding: 20px; border-radius: 10px; border: 1px solid #444; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
         h1 { color: #ff4444; text-align: center; border-bottom: 2px solid #ff4444; }
         .input-area { background: #333; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center; }
-        input { font-size: 20px; padding: 10px; width: 120px; border-radius: 5px; }
-        button { font-size: 20px; padding: 10px 20px; background: #ff4444; color: white; border: none; cursor: pointer; }
-        .summary-box { background: #1e3a5f; padding: 15px; border-radius: 5px; margin-bottom: 15px; }
+        input { font-size: 20px; padding: 10px; width: 120px; border-radius: 5px; border: none; }
+        button { font-size: 20px; padding: 10px 20px; background: #ff4444; color: white; border: none; cursor: pointer; border-radius: 5px; }
+        .summary-box { background: #1e3a5f; padding: 15px; border-radius: 5px; margin-bottom: 15px; border-left: 5px solid #3498db; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #222; }
         th, td { border: 1px solid #444; padding: 12px; text-align: center; }
         th { background: #444; color: #ff4444; }
@@ -33,49 +33,51 @@ function runSimulation() {
     const totalRunes = parseInt(document.getElementById('runeInput').value) || 0;
     const runeLimit = totalRunes * 0.9;
 
-    let allSteps = [];
-
-    // 全99段階の強化について
-    for (let n = 2; n <= 100; n++) {
-        let baseP = (101 - n) / 100;
-        let currentP = baseP;
-
-        // その段階で石板を1枚ずつ足していく工程をすべてリスト化
-        for (let k = 1; k <= 10; k++) {
-            if (currentP >= 1.0) break; // 既に100%なら終了
-
-            let nextP = Math.min(1.0, currentP + 0.1);
-            // 素材節約量 = (1/前P) - (1/次P)
-            let materialSaving = (1 / currentP) - (1 / nextP);
-            // 石板の消費期待値 = 1枚 / 次P
-            let expectedRuneCost = 1 / nextP;
-            let efficiency = materialSaving / expectedRuneCost;
-
-            allSteps.push({
-                stage: n,
-                efficiency: efficiency,
-                materialSaving: materialSaving,
-                expectedRuneCost: expectedRuneCost,
-                toProb: nextP
-            });
-            currentP = nextP;
-        }
-    }
-
-    // 全ての「1枚追加」工程を効率順にソート（189パターン以上の全工程）
-    allSteps.sort((a, b) => b.efficiency - a.efficiency);
-
     let summaryMap = {};
     let totalExpectedRunes = 0;
     let totalSaved = 0;
 
-    // 効率が良い1枚から順に、上限まで採用
-    for (let step of allSteps) {
-        if (totalExpectedRunes + step.expectedRuneCost <= runeLimit) {
-            summaryMap[step.stage] = (summaryMap[step.stage] || 0) + 1;
-            totalExpectedRunes += step.expectedRuneCost;
-            totalSaved += step.materialSaving;
+    // 1枚ずつ「今、全段階の中で最も素材を節約できるのはどこか」を探して、石板が尽きるまで繰り返す
+    while (totalExpectedRunes < runeLimit) {
+        let bestEfficiency = -1;
+        let bestStage = -1;
+        let bestCost = 0;
+        let bestSaving = 0;
+
+        for (let n = 2; n <= 100; n++) {
+            let baseP = (101 - n) / 100;
+            let currentNum = summaryMap[n] || 0;
+            
+            // 既に100%ならスキップ
+            let currentP = Math.min(1.0, baseP + (currentNum * 0.1));
+            // 91%以上ですでに石板を使っている場合、次は100%固定
+            if (currentNum > 0 && (baseP + (currentNum-1)*0.1 >= 0.9)) currentP = 1.0;
+            
+            if (currentP >= 1.0) continue;
+
+            // 「次の1枚」を使った時の確率
+            let nextP = Math.min(1.0, baseP + ((currentNum + 1) * 0.1));
+            // 特殊処理：91%以上になるなら1.0(100%)へ
+            if (baseP + (currentNum * 0.1) >= 0.9) nextP = 1.0;
+
+            let materialSaving = (1 / currentP) - (1 / nextP);
+            let expectedRuneCost = 1 / nextP;
+            let efficiency = materialSaving / expectedRuneCost;
+
+            if (efficiency > bestEfficiency) {
+                bestEfficiency = efficiency;
+                bestStage = n;
+                bestCost = expectedRuneCost;
+                bestSaving = materialSaving;
+            }
         }
+
+        // どこも改善できない、または石板上限なら終了
+        if (bestStage === -1 || (totalExpectedRunes + bestCost > runeLimit)) break;
+
+        summaryMap[bestStage] = (summaryMap[bestStage] || 0) + 1;
+        totalExpectedRunes += bestCost;
+        totalSaved += bestSaving;
     }
 
     document.getElementById('summaryArea').innerHTML = `
@@ -88,6 +90,7 @@ function runSimulation() {
         if (summaryMap[n]) {
             let base = (101 - n);
             let finalP = Math.min(100, base + (summaryMap[n] * 10));
+            if (summaryMap[n] > 0 && (base + (summaryMap[n]-1)*10 >= 90)) finalP = 100;
             html += `<tr><td>${n}回目</td><td>${base}%</td><td><b style="color:#ff4444;">${summaryMap[n]} 枚</b></td><td>${finalP}%</td></tr>`;
         }
     }
