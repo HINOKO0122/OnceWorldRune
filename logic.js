@@ -1,5 +1,6 @@
 class UpgradeOptimizer {
     constructor(totalRunes) {
+        this.totalRunes = totalRunes;
         this.limit = totalRunes * 0.9;
         this.stages = [];
         this.init();
@@ -9,22 +10,17 @@ class UpgradeOptimizer {
         for (let n = 2; n <= 100; n++) {
             let baseP = (101 - n) / 100;
             let stageOptions = [];
-            
-            // 各段階で0〜10枚使う全パターンを計算
             for (let k = 0; k <= 10; k++) {
                 let nextP = Math.min(1.0, baseP + (k * 0.1));
-                // 91%以上にするなら100%として扱う
                 if (k > 0 && baseP + (k - 1) * 0.1 >= 0.9) nextP = 1.0;
 
-                let expectedMaterial = 1 / nextP;
-                let expectedRuneCost = k === 0 ? 0 : k / nextP;
-                
                 stageOptions.push({
                     runes: k,
-                    material: expectedMaterial,
-                    runeCost: expectedRuneCost,
+                    material: 1 / nextP,
+                    runeCost: k === 0 ? 0 : k / nextP,
                     prob: nextP,
-                    saving: (1 / baseP) - expectedMaterial
+                    stageNum: n,
+                    baseP: baseP
                 });
                 if (nextP === 1.0) break;
             }
@@ -32,41 +28,44 @@ class UpgradeOptimizer {
         }
     }
 
-    // 貪欲法に「入れ替え」を組み合わせた最適化
     calculate() {
-        let currentPlan = this.stages.map(options => options[0]); // 最初は全て0枚
-        let currentTotalCost = 0;
+        let currentPlanIdx = new Array(this.stages.length).fill(0);
+        let currentTotalRuneCost = 0;
 
-        // 1枚あたりの節約効率が最も高い「アップグレード」を繰り返し選択
         while (true) {
             let bestUpgrade = null;
 
             for (let i = 0; i < this.stages.length; i++) {
-                let currentOption = currentPlan[i];
-                for (let nextOption of this.stages[i]) {
-                    if (nextOption.runes <= currentOption.runes) continue;
-
-                    let costDiff = nextOption.runeCost - currentOption.runeCost;
-                    let savingDiff = nextOption.saving - currentOption.saving;
+                let current = this.stages[i][currentPlanIdx[i]];
+                
+                for (let nextIdx = currentPlanIdx[i] + 1; nextIdx < this.stages[i].length; nextIdx++) {
+                    let next = this.stages[i][nextIdx];
+                    let costDiff = next.runeCost - current.runeCost;
+                    let savingDiff = current.material - next.material;
                     let efficiency = savingDiff / costDiff;
 
-                    if (currentTotalCost + costDiff <= this.limit) {
+                    if (currentTotalRuneCost + costDiff <= this.limit) {
                         if (!bestUpgrade || efficiency > bestUpgrade.efficiency) {
-                            bestUpgrade = { stageIdx: i, option: nextOption, costDiff: costDiff, efficiency: efficiency };
+                            bestUpgrade = { stageIdx: i, nextIdx: nextIdx, costDiff: costDiff, efficiency: efficiency };
                         }
                     }
                 }
             }
 
             if (!bestUpgrade) break;
-            currentTotalCost += bestUpgrade.costDiff;
-            currentPlan[bestUpgrade.stageIdx] = bestUpgrade.option;
+            currentTotalRuneCost += bestUpgrade.costDiff;
+            currentPlanIdx[bestUpgrade.stageIdx] = bestUpgrade.nextIdx;
         }
 
-        return {
-            plan: currentPlan.filter(p => p.runes > 0),
-            totalCost: currentTotalCost,
-            totalSaving: currentPlan.reduce((sum, p) => sum + p.saving, 0)
-        };
+        let finalPlan = currentPlanIdx.map((idx, i) => this.stages[i][idx]).filter(p => p.runes > 0);
+        let totalMatExp = 0;
+        // 石板を使わない段階も含めて、全100段階の使用素材期待値を合算
+        for (let i = 0; i < this.stages.length; i++) {
+            totalMatExp += this.stages[i][currentPlanIdx[i]].material;
+        }
+        // 1回目の100%成功分(1個)を追加
+        totalMatExp += 1;
+
+        return { plan: finalPlan, totalCost: currentTotalRuneCost, totalMatExp: totalMatExp };
     }
 }
