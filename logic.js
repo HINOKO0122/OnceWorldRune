@@ -13,57 +13,67 @@ class UpgradeOptimizer {
     }
 
     calculate() {
-        let finalPlan = [];
-        let currentTotalRuneCost = 0;
-        let totalMatExp = 1; // 1回目(100%)
+        // 各段階、最初は0枚からスタート
+        let currentPlan = this.stages.map(s => ({
+            runes: 0,
+            runeCost: 0,
+            prob: s.baseP,
+            stageNum: s.stageNum,
+            baseP: s.baseP,
+            material: 1 / s.baseP
+        }));
 
-        for (let stage of this.stages) {
-            let baseP = stage.baseP;
-            let bestOption = null;
+        let totalRuneCost = 0;
 
-            // 1枚〜10枚まで検討
-            for (let k = 1; k <= 10; k++) {
-                let nextP = Math.min(1.0, baseP + (k * 0.1));
-                
-                // 【重要】最後の1枚が「10%分」の仕事を果たしているかチェック
-                // nextPが1.0に到達したとき、(1.0 - 前の確率) が 0.1(10%) 未満なら、その枚数は「無理やり」と判定
-                let prevP = baseP + ((k - 1) * 0.1);
-                if (nextP === 1.0 && (1.0 - prevP) < 0.099) continue; // 0.1未満の端数埋めを禁止
+        // 貪欲法：予算が尽きるまで「今、最も効率の良い1枚追加」を繰り返す
+        // ただし、hinoko0122さんのルール通り「91%以上」になるまで一気に投入し、
+        // その後は1枚ずつの効率をチェックする
+        while (true) {
+            let bestUpgrade = null;
 
-                // 91%未満なら実戦ルールにより無視
-                if (nextP < 0.91) continue;
+            for (let i = 0; i < currentPlan.length; i++) {
+                let current = currentPlan[i];
+                if (current.runes >= 10) continue;
 
-                let runeCost = k / nextP;
-                
-                if (currentTotalRuneCost + runeCost <= this.limit) {
-                    // より節約できる（基本は枚数が多い）方を採用
-                    if (!bestOption || (1/baseP - 1/nextP) > (1/baseP - 1/bestOption.prob)) {
-                        bestOption = {
-                            runes: k,
-                            runeCost: runeCost,
-                            prob: nextP,
-                            stageNum: stage.stageNum,
-                            baseP: baseP,
-                            material: 1 / nextP
-                        };
+                // 次の段階（1枚増やす、または未投入なら91%になるまで一気に増やす）
+                let nextRunes = current.runes === 0 ? Math.ceil((0.91 - current.baseP) * 10) : current.runes + 1;
+                if (nextRunes > 10) nextRunes = 10;
+
+                let nextP = Math.min(1.0, current.baseP + (nextRunes * 0.1));
+                // 10枚目は100%
+                if (nextRunes === 10) nextP = 1.0; 
+
+                let nextRuneCost = nextRunes / nextP;
+                let costDiff = nextRuneCost - current.runeCost;
+                let savingDiff = current.material - (1 / nextP);
+                let efficiency = savingDiff / costDiff;
+
+                // 順番ルール：前の段階が一定以上（91%以上）になっていないのに次へ行くのを防ぐ
+                if (i > 0 && currentPlan[i-1].prob < 0.91) break;
+
+                if (totalRuneCost + costDiff <= this.limit) {
+                    if (!bestUpgrade || efficiency > bestUpgrade.efficiency) {
+                        bestUpgrade = { idx: i, runes: nextRunes, cost: nextRuneCost, prob: nextP, efficiency: efficiency, costDiff: costDiff };
                     }
                 }
             }
 
-            if (bestOption) {
-                finalPlan.push(bestOption);
-                currentTotalRuneCost += bestOption.runeCost;
-                totalMatExp += bestOption.material;
-            } else {
-                // 予算切れ、または有効なプランが作れない場合
-                let startIdx = this.stages.findIndex(s => s.stageNum === stage.stageNum);
-                for (let i = startIdx; i < this.stages.length; i++) {
-                    totalMatExp += (1 / this.stages[i].baseP);
-                }
-                break; 
-            }
+            if (!bestUpgrade) break;
+
+            // 採用
+            totalRuneCost += bestUpgrade.costDiff;
+            currentPlan[bestUpgrade.idx].runes = bestUpgrade.runes;
+            currentPlan[bestUpgrade.idx].runeCost = bestUpgrade.cost;
+            currentPlan[bestUpgrade.idx].prob = bestUpgrade.prob;
+            currentPlan[bestUpgrade.idx].material = 1 / bestUpgrade.prob;
         }
 
-        return { plan: finalPlan, totalCost: currentTotalRuneCost, totalMatExp: totalMatExp };
+        let plan = currentPlan.filter(p => p.runes > 0);
+        let totalMatExp = 1; // 1回目
+        for (let i = 0; i < currentPlan.length; i++) {
+            totalMatExp += currentPlan[i].material;
+        }
+
+        return { plan: plan, totalCost: totalRuneCost, totalMatExp: totalMatExp };
     }
 }
