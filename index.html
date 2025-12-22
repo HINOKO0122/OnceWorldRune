@@ -2,32 +2,32 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>装備強化・究極最適化ツール</title>
+    <title>装備強化・石板最適化</title>
     <style>
-        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #121212; color: #e0e0e0; padding: 20px; }
-        .container { max-width: 900px; margin: 0 auto; background: #1e1e1e; padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        h1 { color: #ff4b2b; text-align: center; font-size: 2em; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 10px; }
+        body { font-family: sans-serif; background: #121212; color: #e0e0e0; padding: 20px; }
+        .container { max-width: 900px; margin: 0 auto; background: #1e1e1e; padding: 30px; border-radius: 15px; }
+        h1 { color: #ff4b2b; text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; }
+        .note { background: #332200; color: #ffcc00; padding: 10px; border-radius: 5px; margin-bottom: 20px; font-size: 0.9em; text-align: center; }
         .input-group { text-align: center; margin-bottom: 30px; }
-        input { background: #333; border: 1px solid #444; color: #fff; padding: 12px; font-size: 18px; border-radius: 5px; width: 150px; margin-right: 10px; }
-        button { background: linear-gradient(135deg, #ff4b2b 0%, #ff416c 100%); border: none; color: white; padding: 12px 30px; font-size: 18px; border-radius: 5px; cursor: pointer; transition: 0.3s; }
-        button:hover { transform: translateY(-2px); opacity: 0.9; }
-        .result-header { background: #252525; padding: 20px; border-radius: 10px; border-left: 5px solid #ff4b2b; margin-bottom: 20px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th { background: #333; color: #ff4b2b; padding: 15px; text-align: center; }
-        td { padding: 12px; border-bottom: 1px solid #333; text-align: center; }
+        input { background: #333; border: 1px solid #444; color: #fff; padding: 10px; width: 100px; border-radius: 5px; }
+        button { background: #ff4b2b; border: none; color: white; padding: 10px 20px; border-radius: 5px; cursor: pointer; }
+        .result-header { background: #252525; padding: 15px; border-radius: 10px; border-left: 5px solid #ff4b2b; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #333; color: #ff4b2b; padding: 10px; }
+        td { padding: 10px; border-bottom: 1px solid #333; text-align: center; }
         .highlight { color: #ff4b2b; font-weight: bold; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>装備強化・究極最適化</h1>
+        <h1>装備強化・石板最適化</h1>
+        <div class="note">下振れが怖いので、入力された値の0.9倍の石板を使用</div>
         <div class="input-group">
-            <input type="number" id="runeCount" value="100" min="1">
+            用意した石板総数: <input type="number" id="runeCount" value="100">
             <button onclick="optimize()">最適化計算を実行</button>
         </div>
         <div id="results"></div>
     </div>
-
     <script src="logic.js"></script>
     <script>
         function optimize() {
@@ -38,30 +38,22 @@
             let html = `
                 <div class="result-header">
                     <p>石板消費期待値合計: <span class="highlight">${result.totalCost.toFixed(2)} 枚</span> / 上限 ${optimizer.limit.toFixed(2)}</p>
-                    <p>素材節約期待値: <span class="highlight">約 ${result.totalSaving.toFixed(1)} 個分</span></p>
+                    <p>使用素材期待値: <span class="highlight">約 ${result.totalMatExp.toFixed(1)} 個</span></p>
                 </div>
                 <table>
                     <tr><th>強化段階</th><th>元の確率</th><th>投入石板</th><th>強化後確率</th></tr>
             `;
 
-            // 段階が重い順（100回目〜）に表示
             result.plan.reverse().forEach(p => {
-                // 逆算して何回目か特定
-                let stageNum = Math.round(101 - ((1/p.material + p.saving)**-1 * 100)); 
-                // 正確な表示のために再計算
-                let baseP = (1 / (1 / p.prob + p.saving));
-                let stageDisplay = Math.round(101 - baseP * 100);
-
                 html += `
                     <tr>
-                        <td>${stageDisplay}回目</td>
-                        <td>${Math.round(baseP * 100)}%</td>
+                        <td>${p.stageNum}回目</td>
+                        <td>${Math.round(p.baseP * 100)}%</td>
                         <td class="highlight">${p.runes} 枚</td>
                         <td>${Math.round(p.prob * 100)}%</td>
                     </tr>
                 `;
             });
-
             html += `</table>`;
             document.getElementById('results').innerHTML = html;
         }
