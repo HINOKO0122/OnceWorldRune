@@ -16,11 +16,9 @@ class UpgradeOptimizer {
         let allActions = [];
 
         for (let s of this.stages) {
-            // --- ステップ1: 91%以上に持っていくための「セット」 ---
-            // 10%刻みなので、端数なしで91%を超える最小枚数を出す
-            // 例: 1%なら9枚(91%)、2%なら8枚(92%)、10%なら9枚(100%)
+            // STEP 1: 91%以上に持っていくための最小「セット」
             let firstRunes = Math.ceil((0.91 - s.baseP) * 10);
-            if (firstRunes < 0) firstRunes = 0; // すでに91%以上の場合は0
+            if (firstRunes < 0) firstRunes = 0;
             if (firstRunes > 10) firstRunes = 10;
 
             let firstProb = (firstRunes === 10) ? 1.0 : Math.min(1.0, s.baseP + (firstRunes * 0.1));
@@ -33,54 +31,54 @@ class UpgradeOptimizer {
                     type: 'STEP_1_SET',
                     runes: firstRunes,
                     prob: firstProb,
-                    cost: firstCost,
                     efficiency: firstSaving / firstCost,
-                    costToApply: firstCost
+                    costToApply: firstCost,
+                    targetRuneTotal: firstRunes
                 });
             }
 
-            // --- ステップ2: あと1枚で100%にできる場合の「最後の一押し」 ---
-            // STEP_1で100%に届かなかった場合のみ、追加1枚の効率を計算
+            // STEP 2: あと1枚で100%にできる場合の「最後の一押し」
+            // STEP 1で100%にならなかった場合のみ、追加分のコストと節約量を評価
             if (firstProb < 1.0) {
-                let secondRunes = 10; // 最後は必ず10枚(100%)
                 let secondProb = 1.0;
-                let secondCost = 10 / 1.0;
+                let cost91 = firstRunes / firstProb;
+                let cost100 = 10 / 1.0;
                 
-                let costDiff = secondCost - firstCost;
+                let costDiff = cost100 - cost91;
                 let savingDiff = (1 / firstProb) - 1.0;
 
                 allActions.push({
                     stageNum: s.stageNum,
                     type: 'STEP_2_FINISH',
-                    runes: secondRunes,
-                    prob: secondProb,
-                    cost: secondCost,
+                    runes: 10,
+                    prob: 1.0,
                     efficiency: savingDiff / costDiff,
-                    costToApply: costDiff
+                    costToApply: costDiff,
+                    targetRuneTotal: 10
                 });
             }
         }
 
-        // 全アクションを「1枚あたりの素材節約量」で降順ソート
+        // 重要：全段階の全アクションを「1枚あたりの純粋な節約量」でソート
         allActions.sort((a, b) => b.efficiency - a.efficiency);
 
         let currentTotalRuneCost = 0;
 
-        // リストを上から順に適用。一度でも予算オーバーしたら即終了。
         for (let action of allActions) {
             let stage = this.stages.find(s => s.stageNum === action.stageNum);
 
-            // 依存ルール: セット(STEP1)が終わっていないのに100%化(STEP2)はできない
+            // 依存関係：セットが終わっていないのに100%化はできない
             if (action.type === 'STEP_2_FINISH' && stage.runes === 0) continue;
+            // 既にそのアクション以上の状態ならスキップ
+            if (action.targetRuneTotal <= stage.runes) continue;
 
             if (currentTotalRuneCost + action.costToApply <= this.limit) {
                 currentTotalRuneCost += action.costToApply;
-                stage.runes = action.runes;
+                stage.runes = action.targetRuneTotal;
                 stage.prob = action.prob;
-                stage.runeCost = action.cost;
                 stage.material = 1 / action.prob;
             } else {
-                // 予算が足りなくなった時点で、以降の全アクションを破棄して終了
+                // 予算オーバー：以降の全アクションを即座に破棄（hinoko0122ルール）
                 break;
             }
         }
