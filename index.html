@@ -40,10 +40,8 @@ function runSimulation() {
         let bestEff = -1;
         let bestStagePlan = null;
 
-        // 1枚〜10枚使うパターンのうち、どれが最も1枚あたりの節約効率が高いか
         for (let k = 1; k <= 10; k++) {
             let nextP = Math.min(1.0, baseP + (k * 0.1));
-            // 91%以上から使う場合は100%にする
             if (baseP + (k-1)*0.1 >= 0.9) nextP = 1.0;
 
             let materialSaving = (1 / baseP) - (1 / nextP);
@@ -66,20 +64,17 @@ function runSimulation() {
         bestPlansPerStage.push(bestStagePlan);
     }
 
-    // 各段階のベストプランを効率順に並べ替え（これで100回目(1%)がトップに来る）
     bestPlansPerStage.sort((a, b) => b.efficiency - a.efficiency);
 
     let summaryMap = {};
     let totalRuneCost = 0;
     let totalMatSaved = 0;
-    let usedStages = new Set();
 
     for (let plan of bestPlansPerStage) {
         if (totalRuneCost + plan.cost <= runeLimit) {
             summaryMap[plan.stage] = plan;
             totalRuneCost += plan.cost;
             totalMatSaved += plan.saving;
-            usedStages.add(plan.stage);
         }
     }
 
