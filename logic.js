@@ -6,70 +6,66 @@ class UpgradeOptimizer {
     }
 
     init() {
-        for (let n = 2; n <= 100; n++) {
+        // 100回目(1%)から2回目(99%)まで、順番に並べる
+        for (let n = 100; n >= 2; n--) {
             let baseP = (101 - n) / 100;
-            let options = [];
-            // 0枚（使わない）は常に選択肢にある
-            options.push({ runes: 0, material: 1 / baseP, runeCost: 0, prob: baseP, stageNum: n, baseP: baseP });
-
-            for (let k = 1; k <= 10; k++) {
-                let nextP = Math.min(1.0, baseP + (k * 0.1));
-                if (k > 0 && baseP + (k - 1) * 0.1 >= 0.9) nextP = 1.0;
-                
-                // 【重要】強化後確率が91%未満になるような中途半端な使い方は無視する
-                if (nextP < 0.91) continue;
-
-                options.push({
-                    runes: k,
-                    material: 1 / nextP,
-                    runeCost: k / nextP,
-                    prob: nextP,
-                    stageNum: n,
-                    baseP: baseP
-                });
-                if (nextP === 1.0) break;
-            }
-            this.stages.push(options);
+            this.stages.push({
+                stageNum: n,
+                baseP: baseP
+            });
         }
     }
 
     calculate() {
-        let currentPlanIdx = new Array(this.stages.length).fill(0);
+        let finalPlan = [];
         let currentTotalRuneCost = 0;
+        let totalMatExp = 1; // 1回目(100%成功)の分
 
-        while (true) {
-            let bestStep = null;
+        // 100回目から1つずつ、順番にしか石板を使えない
+        for (let stage of this.stages) {
+            let baseP = stage.baseP;
+            let bestOption = null;
 
-            for (let i = 0; i < this.stages.length; i++) {
-                let current = this.stages[i][currentPlanIdx[i]];
+            // その段階で「91%以上」にするための最小枚数から10枚までを検討
+            for (let k = 1; k <= 10; k++) {
+                let nextP = Math.min(1.0, baseP + (k * 0.1));
+                if (k > 0 && baseP + (k - 1) * 0.1 >= 0.9) nextP = 1.0;
+
+                // 91%未満なら無視
+                if (nextP < 0.91) continue;
+
+                let runeCost = k / nextP;
                 
-                for (let nextIdx = 1; nextIdx < this.stages[i].length; nextIdx++) {
-                    let next = this.stages[i][nextIdx];
-                    if (next.runes <= current.runes) continue;
-
-                    let costDiff = next.runeCost - current.runeCost;
-                    let savingDiff = current.material - next.material;
-                    let efficiency = savingDiff / costDiff;
-
-                    if (currentTotalRuneCost + costDiff <= this.limit) {
-                        if (!bestStep || efficiency > bestStep.efficiency) {
-                            bestStep = { stageIdx: i, nextIdx: nextIdx, costDiff: costDiff, efficiency: efficiency };
-                        }
-                    }
+                // 予算内で、最も素材節約量が大きい（＝枚数が多い）方を選ぶ
+                if (currentTotalRuneCost + runeCost <= this.limit) {
+                    bestOption = {
+                        runes: k,
+                        runeCost: runeCost,
+                        prob: nextP,
+                        stageNum: stage.stageNum,
+                        baseP: baseP,
+                        material: 1 / nextP
+                    };
                 }
             }
 
-            if (!bestStep) break;
-            currentTotalRuneCost += bestStep.costDiff;
-            currentPlanIdx[bestStep.stageIdx] = bestStep.nextIdx;
+            if (bestOption) {
+                // 採用して次の段階へ
+                finalPlan.push(bestOption);
+                currentTotalRuneCost += bestOption.runeCost;
+                totalMatExp += bestOption.material;
+            } else {
+                // 予算切れ：この段階以降は石板を使わず「素の確率」で計算
+                totalMatExp += (1 / baseP);
+                // 以降の全ステージも素の確率で加算
+                let remainingStages = this.stages.slice(this.stages.indexOf(stage) + 1);
+                for (let rs of remainingStages) {
+                    totalMatExp += (1 / rs.baseP);
+                }
+                break; 
+            }
         }
 
-        let plan = currentPlanIdx.map((idx, i) => this.stages[i][idx]).filter(p => p.runes > 0);
-        let totalMatExp = 1; 
-        for (let i = 0; i < this.stages.length; i++) {
-            totalMatExp += this.stages[i][currentPlanIdx[i]].material;
-        }
-
-        return { plan: plan, totalCost: currentTotalRuneCost, totalMatExp: totalMatExp };
+        return { plan: finalPlan, totalCost: currentTotalRuneCost, totalMatExp: totalMatExp };
     }
 }
