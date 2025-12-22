@@ -33,54 +33,43 @@ function runSimulation() {
     const totalRunes = parseInt(document.getElementById('runeInput').value) || 0;
     const runeLimit = totalRunes * 0.9;
 
-    let bestPlanesPerStage = [];
+    let plans = [];
 
-    // 全99段階(2〜100回目)を検証
+    // 各強化段階において「100%成功させるための必要枚数」で効率を出す
     for (let n = 2; n <= 100; n++) {
         let baseP = (101 - n) / 100;
-        let stageBestEfficiency = -1;
-        let stageBestPlane = null;
+        
+        // 石板をk枚使って「100%」にする
+        // 枚数kは、(1.0 - baseP) / 0.1 を切り上げたもの
+        let k = Math.ceil((1.0 - baseP) / 0.1);
+        if (k > 10) k = 10;
 
-        // その段階で「石板を何枚使うのが1枚あたり最も効率的か」を1〜10枚で探す
-        for (let k = 1; k <= 10; k++) {
-            let nextP = Math.min(1.0, baseP + (k * 0.1));
-            
-            // 91%以上から使う場合、または10枚使って100%にする場合
-            if (baseP + (k-1)*0.1 >= 0.9 || k === 10) {
-                nextP = 1.0;
-            }
+        let nextP = 1.0; 
+        let materialSaving = (1 / baseP) - (1 / nextP);
+        let expectedRuneCost = k / nextP; // 100%なので必ずk枚
+        let efficiency = materialSaving / expectedRuneCost;
 
-            let materialSaving = (1 / baseP) - (1 / nextP);
-            let expectedRuneCost = k / nextP; // 石板の消費期待値
-            let efficiency = materialSaving / expectedRuneCost;
-
-            if (efficiency > stageBestEfficiency) {
-                stageBestEfficiency = efficiency;
-                stageBestPlane = {
-                    stage: n,
-                    numRunes: k,
-                    efficiency: efficiency,
-                    expectedRuneCost: expectedRuneCost,
-                    finalP: nextP * 100
-                };
-            }
-            if (nextP === 1.0) break;
-        }
-        bestPlanesPerStage.push(stageBestPlane);
+        plans.push({
+            stage: n,
+            numRunes: k,
+            efficiency: efficiency,
+            expectedRuneCost: expectedRuneCost,
+            materialSaving: materialSaving
+        });
     }
 
-    // 各段階の「ベストな使い方」を、さらに全段階で効率順にソート
-    bestPlanesPerStage.sort((a, b) => b.efficiency - a.efficiency);
+    // 効率が良い順（素材を最も節約できる順）にソート
+    plans.sort((a, b) => b.efficiency - a.efficiency);
 
     let summaryMap = {};
     let totalExpectedRunes = 0;
     let totalSaved = 0;
 
-    for (let plane of bestPlanesPerStage) {
-        if (totalExpectedRunes + plane.expectedRuneCost <= runeLimit) {
-            summaryMap[plane.stage] = plane;
-            totalExpectedRunes += plane.expectedRuneCost;
-            totalSaved += plane.materialSaving;
+    for (let p of plans) {
+        if (totalExpectedRunes + p.expectedRuneCost <= runeLimit) {
+            summaryMap[p.stage] = p;
+            totalExpectedRunes += p.expectedRuneCost;
+            totalSaved += p.materialSaving;
         }
     }
 
@@ -90,11 +79,11 @@ function runSimulation() {
     `;
 
     let html = "<table><tr><th>強化回数</th><th>素の確率</th><th>石板投入数</th><th>強化後の確率</th></tr>";
+    // 100回目から順に表示
     for (let n = 100; n >= 2; n--) {
         if (summaryMap[n]) {
-            let base = (101 - n);
             let p = summaryMap[n];
-            html += `<tr><td>${n}回目</td><td>${base}%</td><td><b style="color:#ff4444;">${p.numRunes} 枚</b></td><td>${p.finalP.toFixed(0)}%</td></tr>`;
+            html += `<tr><td>${n}回目</td><td>${(101-n)}%</td><td><b style="color:#ff4444;">${p.numRunes} 枚</b></td><td>100%</td></tr>`;
         }
     }
     html += "</table>";
