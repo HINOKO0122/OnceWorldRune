@@ -4,21 +4,20 @@
     <meta charset="UTF-8">
     <title>装備強化・石板最適化</title>
     <style>
-        body { font-family: sans-serif; background: #121212; color: #e0e0e0; padding: 20px; }
+        body { font-family: -apple-system, sans-serif; background: #121212; color: #e0e0e0; padding: 20px; }
         .container { max-width: 850px; margin: 0 auto; background: #1e1e1e; padding: 30px; border-radius: 15px; border: 1px solid #333; }
-        h1 { color: #ff4b2b; text-align: center; margin-top: 0; }
-        .note { background: #2c1a00; color: #ffb300; padding: 12px; border-radius: 8px; margin-bottom: 25px; text-align: center; border: 1px solid #553300; font-weight: bold; }
+        h1 { color: #ff4b2b; text-align: center; margin-bottom: 5px; }
+        .note { background: #2c1a00; color: #ffb300; padding: 12px; border-radius: 8px; margin-bottom: 25px; text-align: center; border: 1px solid #553300; font-size: 0.95em; }
         .input-group { text-align: center; margin-bottom: 30px; background: #252525; padding: 20px; border-radius: 10px; }
-        input { background: #121212; border: 1px solid #444; color: #fff; padding: 10px; width: 120px; font-size: 18px; border-radius: 5px; text-align: center; }
-        button { background: #ff4b2b; border: none; color: white; padding: 12px 25px; border-radius: 5px; cursor: pointer; font-size: 16px; font-weight: bold; transition: 0.2s; }
-        button:hover { background: #ff6a4d; }
+        input { background: #121212; border: 1px solid #444; color: #fff; padding: 10px; width: 100px; font-size: 18px; border-radius: 5px; text-align: center; margin: 0 10px; }
+        button { background: #ff4b2b; border: none; color: white; padding: 12px 25px; border-radius: 5px; cursor: pointer; font-weight: bold; }
         .result-header { background: #2a2a2a; padding: 20px; border-radius: 10px; border-left: 6px solid #ff4b2b; margin-bottom: 25px; display: flex; justify-content: space-around; }
         .res-item { text-align: center; }
-        .res-val { display: block; font-size: 1.4em; color: #ff4b2b; font-weight: bold; }
+        .res-val { display: block; font-size: 1.5em; color: #ff4b2b; font-weight: bold; }
         table { width: 100%; border-collapse: collapse; background: #181818; }
         th { background: #333; color: #ff4b2b; padding: 12px; border-bottom: 2px solid #444; }
         td { padding: 12px; border-bottom: 1px solid #2a2a2a; text-align: center; }
-        tr:hover { background: #222; }
+        .hl { color: #ff4b2b; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -48,13 +47,12 @@
                     <tbody>
             `;
 
-            // 100回目から順に表示
             result.plan.sort((a,b) => b.stageNum - a.stageNum).forEach(p => {
                 html += `
                     <tr>
                         <td>${p.stageNum}回目</td>
                         <td>${Math.round(p.baseP * 100)}%</td>
-                        <td style="color:#ff4b2b; font-weight:bold;">${p.runes} 枚</td>
+                        <td class="hl">${p.runes} 枚</td>
                         <td>${Math.round(p.prob * 100)}%</td>
                     </tr>
                 `;
