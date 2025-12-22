@@ -15,65 +15,77 @@ class UpgradeOptimizer {
     calculate() {
         let allActions = [];
 
-        // 全段階の「第一目標(91%)」と「第二目標(100%)」をアクションとしてリストアップ
         for (let s of this.stages) {
-            // アクション1: 91%セット
-            let runesTo91 = Math.ceil((0.91 - s.baseP) * 10);
-            if (runesTo91 > 10) runesTo91 = 10;
-            let prob91 = (runesTo91 === 10) ? 1.0 : Math.min(1.0, s.baseP + (runesTo91 * 0.1));
-            let cost91 = runesTo91 / prob91;
-            let saving91 = (1 / s.baseP) - (1 / prob91);
+            // --- ステップ1: 91%以上に持っていくための「セット」 ---
+            // 10%刻みなので、端数なしで91%を超える最小枚数を出す
+            // 例: 1%なら9枚(91%)、2%なら8枚(92%)、10%なら9枚(100%)
+            let firstRunes = Math.ceil((0.91 - s.baseP) * 10);
+            if (firstRunes < 0) firstRunes = 0; // すでに91%以上の場合は0
+            if (firstRunes > 10) firstRunes = 10;
 
-            allActions.push({
-                stageNum: s.stageNum,
-                type: 'SET_91',
-                runes: runesTo91,
-                prob: prob91,
-                cost: cost91,
-                efficiency: saving91 / cost91
-            });
+            let firstProb = (firstRunes === 10) ? 1.0 : Math.min(1.0, s.baseP + (firstRunes * 0.1));
+            let firstCost = firstRunes / firstProb;
+            let firstSaving = (1 / s.baseP) - (1 / firstProb);
 
-            // アクション2: 100%への引き上げ（91%セットより効率が良い場合がある）
-            if (runesTo91 < 10) {
-                let cost100 = 10 / 1.0;
-                let costDiff = cost100 - cost91;
-                let savingDiff = (1 / prob91) - 1.0; 
+            if (firstRunes > 0) {
                 allActions.push({
                     stageNum: s.stageNum,
-                    type: 'FINISH_100',
-                    runes: 10,
-                    prob: 1.0,
-                    cost: cost100,
-                    efficiency: savingDiff / costDiff
+                    type: 'STEP_1_SET',
+                    runes: firstRunes,
+                    prob: firstProb,
+                    cost: firstCost,
+                    efficiency: firstSaving / firstCost,
+                    costToApply: firstCost
+                });
+            }
+
+            // --- ステップ2: あと1枚で100%にできる場合の「最後の一押し」 ---
+            // STEP_1で100%に届かなかった場合のみ、追加1枚の効率を計算
+            if (firstProb < 1.0) {
+                let secondRunes = 10; // 最後は必ず10枚(100%)
+                let secondProb = 1.0;
+                let secondCost = 10 / 1.0;
+                
+                let costDiff = secondCost - firstCost;
+                let savingDiff = (1 / firstProb) - 1.0;
+
+                allActions.push({
+                    stageNum: s.stageNum,
+                    type: 'STEP_2_FINISH',
+                    runes: secondRunes,
+                    prob: secondProb,
+                    cost: secondCost,
+                    efficiency: savingDiff / costDiff,
+                    costToApply: costDiff
                 });
             }
         }
 
-        // 全アクションを「1枚あたりの効率」で降順ソート
+        // 全アクションを「1枚あたりの素材節約量」で降順ソート
         allActions.sort((a, b) => b.efficiency - a.efficiency);
 
         let currentTotalRuneCost = 0;
 
+        // リストを上から順に適用。一度でも予算オーバーしたら即終了。
         for (let action of allActions) {
             let stage = this.stages.find(s => s.stageNum === action.stageNum);
-            
-            // 順番ルール: 91%セットがまだ選ばれていないのに100%化はできない
-            if (action.type === 'FINISH_100' && stage.runes === 0) continue;
-            
-            let costDiff = action.cost - stage.runeCost;
 
-            if (currentTotalRuneCost + costDiff <= this.limit) {
-                currentTotalRuneCost += costDiff;
+            // 依存ルール: セット(STEP1)が終わっていないのに100%化(STEP2)はできない
+            if (action.type === 'STEP_2_FINISH' && stage.runes === 0) continue;
+
+            if (currentTotalRuneCost + action.costToApply <= this.limit) {
+                currentTotalRuneCost += action.costToApply;
                 stage.runes = action.runes;
-                stage.runeCost = action.cost;
                 stage.prob = action.prob;
+                stage.runeCost = action.cost;
                 stage.material = 1 / action.prob;
+            } else {
+                // 予算が足りなくなった時点で、以降の全アクションを破棄して終了
+                break;
             }
         }
 
-        // 表示用に強化段階順（100回目〜）にソート
         let plan = this.stages.filter(s => s.runes > 0).sort((a, b) => b.stageNum - a.stageNum);
-        
         let totalMatExp = 1; 
         for (let s of this.stages) {
             totalMatExp += (s.runes > 0 ? s.material : (1 / s.baseP));
