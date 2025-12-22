@@ -13,61 +13,50 @@ class UpgradeOptimizer {
     }
 
     calculate() {
-        // --- 1. 絶対に守りたい「実行順序」のリストを作る ---
-        let strategyQueue = [];
+        let executionQueue = [];
 
-        // ステップA: 100回目から順に「91%〜100%」まで持っていく
+        // --- 手順1: 100回目から順に「91%セット」をリストに追加 ---
         for (let s of this.stages) {
-            let runes = Math.ceil((0.91 - s.baseP) * 10);
-            if (runes < 0) runes = 0;
-            if (runes > 10) runes = 10;
-            let prob = (runes === 10) ? 1.0 : Math.min(1.0, s.baseP + (runes * 0.1));
+            let runesTo91 = Math.ceil((0.91 - s.baseP) * 10);
+            if (runesTo91 < 0) runesTo91 = 0;
+            if (runesTo91 > 10) runesTo91 = 10;
+            let prob91 = (runesTo91 === 10) ? 1.0 : Math.min(1.0, s.baseP + (runesTo91 * 0.1));
 
-            if (runes > 0) {
-                strategyQueue.push({
+            if (runesTo91 > 0) {
+                executionQueue.push({
                     stageNum: s.stageNum,
                     type: 'SET_91',
-                    targetRune: runes,
-                    targetProb: prob,
-                    // 効率（ソートが必要になった場合のため一応計算）
-                    efficiency: ((1 / s.baseP) - (1 / prob)) / (runes / prob)
+                    targetRune: runesTo91,
+                    targetProb: prob91
                 });
             }
         }
 
-        // ステップB: 100回目から順に「残りの1枚を足して100%」にする
+        // --- 手順2: 100回目から順に「100%への引き上げ」をリストに追加 ---
         for (let s of this.stages) {
-            let currentRunes = Math.ceil((0.91 - s.baseP) * 10);
-            if (currentRunes >= 0 && currentRunes < 10) {
-                let currentProb = Math.min(1.0, s.baseP + (currentRunes * 0.1));
-                let cost91 = currentRunes / currentProb;
-                let cost100 = 10 / 1.0;
-                
-                strategyQueue.push({
+            let runesTo91 = Math.ceil((0.91 - s.baseP) * 10);
+            // 91%セットの時点で100%に届かなかった場合のみ追加
+            if (runesTo91 >= 0 && runesTo91 < 10) {
+                executionQueue.push({
                     stageNum: s.stageNum,
                     type: 'FINISH_100',
                     targetRune: 10,
-                    targetProb: 1.0,
-                    efficiency: ((1 / currentProb) - 1.0) / (cost100 - cost91)
+                    targetProb: 1.0
                 });
             }
         }
 
-        // --- 2. この順番で石板が尽きるまで適用する ---
-        // ※ここではあえて sort() を使わず、作成したキューの順番を最優先します
-        // ただし、もし「節約効率」を優先したい場合は strategyQueue.sort() を有効にします
-        // 今回は「90回目より80回目が先に来るバグ」を殺すため、このまま進みます。
-        
+        // --- 実行 ---
         let currentTotalRuneCost = 0;
         let activePlan = this.stages.map(s => ({...s, currentRunes: 0, currentProb: s.baseP}));
 
-        for (let action of strategyQueue) {
+        for (let action of executionQueue) {
             let stage = activePlan.find(s => s.stageNum === action.stageNum);
 
-            // 既にそのアクション以上の状態ならスキップ（重複防止）
+            // 既にその枚数以上ならスキップ
             if (action.targetRune <= stage.currentRunes) continue;
 
-            // このアクションを追加で適用するのに必要な「追加期待値コスト」
+            // 追加で必要な期待値コストを計算
             let currentCost = stage.currentRunes === 0 ? 0 : (stage.currentRunes / stage.currentProb);
             let nextCost = action.targetRune / action.targetProb;
             let costDiff = nextCost - currentCost;
@@ -78,21 +67,14 @@ class UpgradeOptimizer {
                 stage.currentProb = action.targetProb;
                 stage.material = 1 / stage.currentProb;
             } else {
-                // 予算オーバー：ここで即座に終了。余った石板は使わない。
+                // 予算オーバー：ここで即座に終了。余った予算で後ろのアクションを探さない。
                 break;
             }
         }
 
-        // --- 3. 結果の出力準備 ---
-        let plan = activePlan.filter(s => s.currentRunes > 0).map(s => ({
-            stageNum: s.stageNum,
-            baseP: s.baseP,
-            runes: s.currentRunes,
-            prob: s.currentProb,
-            material: s.material
-        })).sort((a, b) => b.stageNum - a.stageNum);
-
-        let totalMatExp = 1; // 1回目分
+        // 結果を整形
+        let plan = activePlan.filter(s => s.currentRunes > 0).sort((a, b) => b.stageNum - a.stageNum);
+        let totalMatExp = 1; 
         for (let s of activePlan) {
             totalMatExp += s.material;
         }
