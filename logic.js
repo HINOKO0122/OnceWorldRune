@@ -13,55 +13,52 @@ class UpgradeOptimizer {
     }
 
     calculate() {
-        let actions = [];
+        let allActions = [];
 
-        // 全ての可能な「お得なアクション」をリストアップ
+        // 全段階の「第一目標(91%)」と「第二目標(100%)」をアクションとして抽出
         for (let s of this.stages) {
-            // アクションA: 91%セット (一気に投入)
-            let runes91 = Math.ceil((0.91 - s.baseP) * 10);
-            if (runes91 > 10) runes91 = 10;
-            let prob91 = (runes91 === 10) ? 1.0 : Math.min(1.0, s.baseP + (runes91 * 0.1));
-            
-            let cost91 = runes91 / prob91;
+            // アクション1: 91%セットにする
+            let runesTo91 = Math.ceil((0.91 - s.baseP) * 10);
+            if (runesTo91 > 10) runesTo91 = 10;
+            let prob91 = (runesTo91 === 10) ? 1.0 : Math.min(1.0, s.baseP + (runesTo91 * 0.1));
+            let cost91 = runesTo91 / prob91;
             let saving91 = (1 / s.baseP) - (1 / prob91);
-            
-            actions.push({
+
+            allActions.push({
                 stageNum: s.stageNum,
-                type: 'FIRST_91',
-                runes: runes91,
+                type: 'TARGET_91',
+                runes: runesTo91,
                 prob: prob91,
                 cost: cost91,
                 efficiency: saving91 / cost91
             });
 
-            // アクションB: 100%への引き上げ (すでに91%以上あることが前提のアクション)
-            if (runes91 < 10) {
+            // アクション2: 100%に引き上げる (91%セットが既に選ばれていることが前提)
+            if (runesTo91 < 10) {
                 let cost100 = 10 / 1.0;
                 let costDiff = cost100 - cost91;
-                let savingDiff = (1 / prob91) - (1.0); // 1/1.0 = 1.0
-                
-                actions.push({
+                let savingDiff = (1 / prob91) - 1.0; // 1/1.0 = 1.0
+                allActions.push({
                     stageNum: s.stageNum,
-                    type: 'FINISH_100',
+                    type: 'TARGET_100',
                     runes: 10,
                     prob: 1.0,
                     cost: cost100,
-                    efficiency: savingDiff / costDiff // 追加の1枚あたりの効率
+                    efficiency: savingDiff / costDiff
                 });
             }
         }
 
-        // 全アクションを「効率(石板1枚あたりの節約量)」で降順ソート
-        actions.sort((a, b) => b.efficiency - a.efficiency);
+        // 全てのアクションを「1枚あたりの効率」で降順ソート
+        allActions.sort((a, b) => b.efficiency - a.efficiency);
 
         let currentTotalRuneCost = 0;
-        let activePlan = {};
 
-        for (let action of actions) {
+        for (let action of allActions) {
             let stage = this.stages.find(s => s.stageNum === action.stageNum);
             
-            // 順番の制約: その段階の「FIRST_91」が終わっていないのに「FINISH_100」はできない
-            if (action.type === 'FINISH_100' && stage.runes === 0) continue;
+            // 順番ルール: 91%セットがまだ選ばれていないのに100%引き上げはできない
+            if (action.type === 'TARGET_100' && stage.runes === 0) continue;
             
             let costDiff = action.cost - stage.runeCost;
 
@@ -72,12 +69,9 @@ class UpgradeOptimizer {
                 stage.prob = action.prob;
                 stage.material = 1 / action.prob;
             }
-            // 予算オーバーしても、他の（もっとコストが低い）アクションが入る可能性があるので continue
         }
 
-        // 表示用に強化段階順にソート
         let plan = this.stages.filter(s => s.runes > 0).sort((a, b) => b.stageNum - a.stageNum);
-        
         let totalMatExp = 1; 
         for (let s of this.stages) {
             totalMatExp += (s.runes > 0 ? s.material : (1 / s.baseP));
