@@ -5,10 +5,10 @@
     <title>装備強化MAX・最適ルーン</title>
     <style>
         body { font-family: sans-serif; background: #1a1a1a; color: #eee; max-width: 800px; margin: 0 auto; padding: 20px; }
-        .card { background: #2a2a2a; padding: 20px; border-radius: 10px; border: 1px solid #444; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+        .card { background: #2a2a2a; padding: 20px; border-radius: 10px; border: 1px solid #444; }
         h1 { color: #ff4444; text-align: center; border-bottom: 2px solid #ff4444; }
         .input-area { background: #333; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center; }
-        input { font-size: 20px; padding: 10px; width: 120px; border-radius: 5px; border: none; }
+        input { font-size: 20px; padding: 10px; width: 120px; border-radius: 5px; }
         button { font-size: 20px; padding: 10px 20px; background: #ff4444; color: white; border: none; cursor: pointer; border-radius: 5px; }
         .summary-box { background: #1e3a5f; padding: 15px; border-radius: 5px; margin-bottom: 15px; border-left: 5px solid #3498db; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #222; }
@@ -37,7 +37,7 @@ function runSimulation() {
     let totalExpectedRunes = 0;
     let totalSaved = 0;
 
-    // 1枚ずつ「今、全段階の中で最も素材を節約できるのはどこか」を探して、石板が尽きるまで繰り返す
+    // 石板1枚ごとに「今、どこに使うのが最も素材の期待値を下げるか」を greedily（どん欲）に選択
     while (totalExpectedRunes < runeLimit) {
         let bestEfficiency = -1;
         let bestStage = -1;
@@ -48,17 +48,17 @@ function runSimulation() {
             let baseP = (101 - n) / 100;
             let currentNum = summaryMap[n] || 0;
             
-            // 既に100%ならスキップ
+            // 現在の確率
             let currentP = Math.min(1.0, baseP + (currentNum * 0.1));
-            // 91%以上ですでに石板を使っている場合、次は100%固定
-            if (currentNum > 0 && (baseP + (currentNum-1)*0.1 >= 0.9)) currentP = 1.0;
+            // 特殊処理：91%以上で既に石板を使っているなら実質100%確定状態
+            if (currentNum > 0 && (baseP + (currentNum-1)*0.1 >= 0.90)) currentP = 1.0;
             
             if (currentP >= 1.0) continue;
 
-            // 「次の1枚」を使った時の確率
+            // 次の1枚を使った時の確率
             let nextP = Math.min(1.0, baseP + ((currentNum + 1) * 0.1));
-            // 特殊処理：91%以上になるなら1.0(100%)へ
-            if (baseP + (currentNum * 0.1) >= 0.9) nextP = 1.0;
+            // 91%以上に到達するなら100%（端数分）として処理
+            if (baseP + (currentNum * 0.1) >= 0.90) nextP = 1.0;
 
             let materialSaving = (1 / currentP) - (1 / nextP);
             let expectedRuneCost = 1 / nextP;
@@ -72,7 +72,6 @@ function runSimulation() {
             }
         }
 
-        // どこも改善できない、または石板上限なら終了
         if (bestStage === -1 || (totalExpectedRunes + bestCost > runeLimit)) break;
 
         summaryMap[bestStage] = (summaryMap[bestStage] || 0) + 1;
@@ -89,7 +88,8 @@ function runSimulation() {
     for (let n = 100; n >= 2; n--) {
         if (summaryMap[n]) {
             let base = (101 - n);
-            let finalP = Math.min(100, base + (summaryMap[n] * 10));
+            let finalP = Math.min(100, (base + (summaryMap[n] * 10)));
+            // 91%以上からさらに1枚使った場合は100%表示
             if (summaryMap[n] > 0 && (base + (summaryMap[n]-1)*10 >= 90)) finalP = 100;
             html += `<tr><td>${n}回目</td><td>${base}%</td><td><b style="color:#ff4444;">${summaryMap[n]} 枚</b></td><td>${finalP}%</td></tr>`;
         }
