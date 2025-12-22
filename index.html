@@ -33,65 +33,66 @@ function runSimulation() {
     const totalRunes = parseInt(document.getElementById('runeInput').value) || 0;
     const runeLimit = totalRunes * 0.9;
 
-    let allOptions = [];
-
-    // 189パターン＋αの全プランを算出
-    for (let n = 2; n <= 100; n++) {
-        let baseP = (101 - n) / 100;
-        
-        // その段階で「石板をk枚使う」あらゆるパターンを評価
-        for (let k = 1; k <= 10; k++) {
-            let nextP = Math.min(1.0, baseP + (k * 0.1));
-            // 91%以上から使う場合は100%にする
-            if (baseP + (k-1)*0.1 >= 0.9) nextP = 1.0;
-
-            let materialSaving = (1 / baseP) - (1 / nextP);
-            let expectedRuneCost = k / nextP;
-            let efficiency = materialSaving / expectedRuneCost;
-
-            allOptions.push({
-                stage: n,
-                numRunes: k,
-                efficiency: efficiency,
-                expectedRuneCost: expectedRuneCost,
-                materialSaving: materialSaving,
-                finalP: nextP
-            });
-
-            if (nextP === 1.0) break;
-        }
-    }
-
-    // 「1枚あたりの節約効率」でソート
-    allOptions.sort((a, b) => b.efficiency - a.efficiency);
-
     let summaryMap = {};
-    let totalExpectedRunes = 0;
+    let currentTotalExpectedCost = 0;
     let totalSavedMaterial = 0;
-    let usedStages = new Set();
 
-    // 効率が良いプランから順に採用
-    for (let opt of allOptions) {
-        if (!usedStages.has(opt.stage)) {
-            if (totalExpectedRunes + opt.expectedRuneCost <= runeLimit) {
-                summaryMap[opt.stage] = opt;
-                usedStages.add(opt.stage);
-                totalExpectedRunes += opt.expectedRuneCost;
-                totalSavedMaterial += opt.materialSaving;
+    // 石板を1枚ずつ、全選択肢の中から「今、最も効率が良い場所」に配置し続ける
+    while (true) {
+        let bestStep = null;
+
+        for (let n = 2; n <= 100; n++) {
+            let baseP = (101 - n) / 100;
+            let currentNum = summaryMap[n] || 0;
+            
+            // 現在の確率
+            let currentP = Math.min(1.0, baseP + (currentNum * 0.1));
+            if (currentNum > 0 && (baseP + (currentNum - 1) * 0.1 >= 0.9)) currentP = 1.0;
+            
+            if (currentP >= 1.0) continue;
+
+            // 次の1枚を使った時の確率
+            let nextP = Math.min(1.0, baseP + ((currentNum + 1) * 0.1));
+            if (baseP + (currentNum * 0.1) >= 0.9) nextP = 1.0;
+
+            // 石板1枚あたりの素材節約量 = (1/前P) - (1/後P)
+            let materialSaving = (1 / currentP) - (1 / nextP);
+            // その石板1枚が消費される期待値 = 1 / 後P
+            let runeExpectedCost = 1 / nextP;
+            let efficiency = materialSaving / runeExpectedCost;
+
+            if (!bestStep || efficiency > bestStep.efficiency) {
+                bestStep = {
+                    stage: n,
+                    efficiency: efficiency,
+                    cost: runeExpectedCost,
+                    saving: materialSaving
+                };
             }
         }
+
+        // 上限を超えるなら終了
+        if (!bestStep || (currentTotalExpectedCost + bestStep.cost > runeLimit)) break;
+
+        // 採用
+        summaryMap[bestStep.stage] = (summaryMap[bestStep.stage] || 0) + 1;
+        currentTotalExpectedCost += bestStep.cost;
+        totalSavedMaterial += bestStep.saving;
     }
 
     document.getElementById('summaryArea').innerHTML = `
-        石板消費期待値合計: <b>${totalExpectedRunes.toFixed(1)} 枚</b> (上限: ${runeLimit.toFixed(1)})<br>
+        石板消費期待値合計: <b>${currentTotalExpectedCost.toFixed(1)} 枚</b> (上限: ${runeLimit.toFixed(1)})<br>
         素材節約期待値: <b>約 ${totalSavedMaterial.toFixed(1)} 個分</b>
     `;
 
     let html = "<table><tr><th>強化回数</th><th>素の確率</th><th>石板投入数</th><th>強化後の確率</th></tr>";
     for (let n = 100; n >= 2; n--) {
         if (summaryMap[n]) {
-            let p = summaryMap[n];
-            html += `<tr><td>${n}回目</td><td>${(101-n)}%</td><td><b style="color:#ff4444;">${p.numRunes} 枚</b></td><td>${Math.round(p.finalP * 100)}%</td></tr>`;
+            let base = (101 - n);
+            let num = summaryMap[n];
+            let finalP = Math.min(100, base + (num * 10));
+            if (num > 0 && (base + (num - 1) * 10 >= 90)) finalP = 100;
+            html += `<tr><td>${n}回目</td><td>${base}%</td><td><b style="color:#ff4444;">${num} 枚</b></td><td>${finalP}%</td></tr>`;
         }
     }
     html += "</table>";
