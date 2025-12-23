@@ -16,18 +16,17 @@ class UpgradeOptimizer {
         let allActions = [];
 
         for (let s of this.stages) {
-            let pPercent = Math.round(s.baseP * 100);
-            let n = Math.floor(pPercent / 10);
-            
-            // --- セット1: (9-n)枚投入して「あと1枚で100%」の状態を作る ---
-            let rSet1 = 9 - n;
+            // --- セット1: 91%以上にするための「最小」枚数 ---
+            // 10%刻みなので、(0.91 - 現在) を 0.1 で割って切り上げ
+            let rSet1 = Math.ceil((0.91 - s.baseP) * 10);
             if (rSet1 < 0) rSet1 = 0;
+            if (rSet1 > 10) rSet1 = 10;
             
-            let pSet1 = s.baseP + (rSet1 * 0.1);
-            let costSet1 = rSet1 / pSet1;
-            let savingSet1 = (1 / s.baseP) - (1 / pSet1);
-
+            let pSet1 = (rSet1 === 10) ? 1.0 : Math.min(1.0, s.baseP + (rSet1 * 0.1));
+            
             if (rSet1 > 0) {
+                let costSet1 = rSet1 / pSet1;
+                let savingSet1 = (1 / s.baseP) - (1 / pSet1);
                 allActions.push({
                     stageNum: s.stageNum,
                     type: 'SET1',
@@ -38,28 +37,27 @@ class UpgradeOptimizer {
                 });
             }
 
-            // --- セット2: 最後1枚を足して100%にする ---
-            let cost100 = 10 / 1.0;
-            let costDiff = cost100 - costSet1;
-            let savingDiff = (1 / pSet1) - 1.0;
-
-            allActions.push({
-                stageNum: s.stageNum,
-                type: 'SET2',
-                saving: savingDiff,
-                cost: costDiff,
-                targetRune: 10,
-                targetProb: 1.0
-            });
+            // --- セット2: あと1枚で100%になるなら、その「最後の1枚」を追加 ---
+            if (pSet1 < 1.0) {
+                let cost100 = 10 / 1.0;
+                let costDiff = cost100 - (rSet1 / pSet1);
+                let savingDiff = (1 / pSet1) - 1.0;
+                allActions.push({
+                    stageNum: s.stageNum,
+                    type: 'SET2',
+                    saving: savingDiff,
+                    cost: costDiff,
+                    targetRune: 10,
+                    targetProb: 1.0
+                });
+            }
         }
 
-        // 有理数比較による厳密ソート (Saving / Cost)
+        // 有理数比較でソート (Saving/Cost)
         allActions.sort((a, b) => {
             let valA = a.saving * b.cost;
             let valB = b.saving * a.cost;
-            if (Math.abs(valA - valB) < 1e-14) {
-                return b.stageNum - a.stageNum; // 効率が同じなら低確率側優先
-            }
+            if (Math.abs(valA - valB) < 1e-14) return b.stageNum - a.stageNum;
             return valB - valA;
         });
 
@@ -68,11 +66,7 @@ class UpgradeOptimizer {
 
         for (let action of allActions) {
             let stage = activePlan.find(s => s.stageNum === action.stageNum);
-
-            // 依存関係: SET1を通らずにSET2はできない
-            if (action.type === 'SET2' && stage.runes === 0 && (9 - Math.floor(Math.round(stage.baseP * 100) / 10)) > 0) {
-                continue; 
-            }
+            if (action.type === 'SET2' && stage.runes === 0) continue;
             if (action.targetRune <= stage.runes) continue;
 
             if (currentTotalCost + action.cost <= this.limit) {
@@ -80,7 +74,7 @@ class UpgradeOptimizer {
                 stage.runes = action.targetRune;
                 stage.prob = action.targetProb;
             } else {
-                break; // 予算オーバーで即終了
+                break; // 予算オーバー即終了
             }
         }
 
