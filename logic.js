@@ -8,7 +8,8 @@ class UpgradeOptimizer {
     init() {
         for (let n = 100; n >= 2; n--) {
             let baseP = (101 - n) / 100;
-            this.stages.push({ stageNum: n, baseP: baseP, runes: 0, prob: baseP, currentCost: 0 });
+            // 内部変数を runes, prob に統一
+            this.stages.push({ stageNum: n, baseP: baseP, runes: 0, prob: baseP, currentExpCost: 0 });
         }
     }
 
@@ -16,7 +17,7 @@ class UpgradeOptimizer {
         let allActions = [];
 
         for (let s of this.stages) {
-            // STEP 1: 91%以上にするセット
+            // STEP 1: 91%以上にするためのセット
             let r1 = Math.ceil((0.91 - s.baseP) * 10);
             if (r1 < 0) r1 = 0;
             if (r1 > 10) r1 = 10;
@@ -35,10 +36,12 @@ class UpgradeOptimizer {
                 });
             }
 
-            // STEP 2: 100%への仕上げ
+            // STEP 2: 100%にするための追加投資
             if (p1 < 1.0) {
+                let r2 = 10;
+                let p2 = 1.0;
                 let cost1 = r1 / p1;
-                let cost2 = 10.0; // 10枚/100%
+                let cost2 = 10.0; // 10枚 / 1.0
                 let costDiff = cost2 - cost1;
                 let savingDiff = (1 / p1) - 1.0;
 
@@ -47,8 +50,8 @@ class UpgradeOptimizer {
                     type: 'SET2',
                     saving: savingDiff,
                     cost: costDiff,
-                    targetRune: 10,
-                    targetProb: 1.0
+                    targetRune: r2,
+                    targetProb: p2
                 });
             }
         }
@@ -65,24 +68,32 @@ class UpgradeOptimizer {
 
         for (let action of allActions) {
             let stage = this.stages.find(s => s.stageNum === action.stageNum);
+            
+            // SET1がまだなのにSET2（追加）はできない
             if (action.type === 'SET2' && stage.runes === 0) continue;
+            // すでにそれ以上の状態ならスキップ
             if (action.targetRune <= stage.runes) continue;
 
-            let nextCost = action.targetRune / action.targetProb;
-            let diff = nextCost - stage.currentCost;
+            let nextExpCost = action.targetRune / action.targetProb;
+            let diff = nextExpCost - stage.currentExpCost;
 
             if (totalExpCost + diff <= this.limit) {
                 totalExpCost += diff;
                 stage.runes = action.targetRune;
                 stage.prob = action.targetProb;
-                stage.currentCost = nextCost;
+                stage.currentExpCost = nextExpCost;
             } else {
+                // 予算オーバー：以降の全アクションを拒否
                 break;
             }
         }
 
-        let plan = this.stages.filter(s => s.runes > 0).sort((a, b) => b.stageNum - a.stageNum);
-        let totalMatExp = 1; 
+        // 表示用にデータを整理
+        let plan = this.stages
+            .filter(s => s.runes > 0)
+            .sort((a, b) => b.stageNum - a.stageNum);
+
+        let totalMatExp = 1; // 1回目
         for (let s of this.stages) {
             totalMatExp += (1 / s.prob);
         }
