@@ -16,32 +16,32 @@ class UpgradeOptimizer {
         let allActions = [];
 
         for (let s of this.stages) {
-            // --- セット1: 91%以上にするための「最小」枚数 ---
-            // 10%刻みなので、(0.91 - 現在) を 0.1 で割って切り上げ
-            let rSet1 = Math.ceil((0.91 - s.baseP) * 10);
-            if (rSet1 < 0) rSet1 = 0;
-            if (rSet1 > 10) rSet1 = 10;
-            
-            let pSet1 = (rSet1 === 10) ? 1.0 : Math.min(1.0, s.baseP + (rSet1 * 0.1));
-            
-            if (rSet1 > 0) {
-                let costSet1 = rSet1 / pSet1;
-                let savingSet1 = (1 / s.baseP) - (1 / pSet1);
+            // --- STEP1: 91%以上にするセット ---
+            let r1 = Math.ceil((0.91 - s.baseP) * 10);
+            if (r1 < 0) r1 = 0;
+            if (r1 > 10) r1 = 10;
+            let p1 = (r1 === 10) ? 1.0 : (s.baseP + r1 * 0.1);
+
+            if (r1 > 0) {
+                let cost1 = r1 / p1; // この状態にするための期待値コスト
+                let saving1 = (1 / s.baseP) - (1 / p1); // 節約される素材期待値
                 allActions.push({
                     stageNum: s.stageNum,
                     type: 'SET1',
-                    saving: savingSet1,
-                    cost: costSet1,
-                    targetRune: rSet1,
-                    targetProb: pSet1
+                    saving: saving1,
+                    cost: cost1,
+                    targetRune: r1,
+                    targetProb: p1
                 });
             }
 
-            // --- セット2: あと1枚で100%になるなら、その「最後の1枚」を追加 ---
-            if (pSet1 < 1.0) {
-                let cost100 = 10 / 1.0;
-                let costDiff = cost100 - (rSet1 / pSet1);
-                let savingDiff = (1 / pSet1) - 1.0;
+            // --- STEP2: 100%にするための追加投資 ---
+            if (p1 < 1.0) {
+                let cost1 = r1 / p1;
+                let cost2 = 10 / 1.0; // 100%時の期待値コストは10
+                let costDiff = cost2 - cost1; // 追加でかかる期待値
+                let savingDiff = (1 / p1) - 1.0; // 追加で節約される素材
+
                 allActions.push({
                     stageNum: s.stageNum,
                     type: 'SET2',
@@ -53,28 +53,40 @@ class UpgradeOptimizer {
             }
         }
 
-        // 有理数比較でソート (Saving/Cost)
+        // 有理数比較による厳密ソート (Saving/Cost)
+        // a.saving/a.cost vs b.saving/b.cost => a.saving * b.cost vs b.saving * a.cost
         allActions.sort((a, b) => {
             let valA = a.saving * b.cost;
             let valB = b.saving * a.cost;
-            if (Math.abs(valA - valB) < 1e-14) return b.stageNum - a.stageNum;
+            if (Math.abs(valA - valB) < 1e-15) {
+                return b.stageNum - a.stageNum; // 効率が同じなら低確率帯優先
+            }
             return valB - valA;
         });
 
         let currentTotalCost = 0;
-        let activePlan = this.stages.map(s => ({...s}));
+        let activePlan = this.stages.map(s => ({...s, currentCost: 0}));
 
         for (let action of allActions) {
             let stage = activePlan.find(s => s.stageNum === action.stageNum);
+
+            // SET1が適用される前にSET2を適用することはできない
             if (action.type === 'SET2' && stage.runes === 0) continue;
+            // すでにそれ以上の状態ならスキップ
             if (action.targetRune <= stage.runes) continue;
 
-            if (currentTotalCost + action.cost <= this.limit) {
-                currentTotalCost += action.cost;
+            // このアクションを適用するための「追加コスト（期待値）」
+            let nextTotalCost = action.targetRune / action.targetProb;
+            let addedCost = nextTotalCost - stage.currentCost;
+
+            if (currentTotalCost + addedCost <= this.limit) {
+                currentTotalCost += addedCost;
                 stage.runes = action.targetRune;
                 stage.prob = action.targetProb;
+                stage.currentCost = nextTotalCost;
             } else {
-                break; // 予算オーバー即終了
+                // 予算オーバー：以降の全アクションを拒否（即時停止）
+                break;
             }
         }
 
