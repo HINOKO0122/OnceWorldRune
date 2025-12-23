@@ -2,65 +2,57 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>装備強化・石板最適化</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>石板最適化ツール</title>
     <style>
-        body { font-family: sans-serif; background: #121212; color: #e0e0e0; padding: 20px; }
-        .container { max-width: 850px; margin: 0 auto; background: #1e1e1e; padding: 30px; border-radius: 15px; border: 1px solid #333; }
-        h1 { color: #ff4b2b; text-align: center; margin-top: 0; }
-        .note { background: #2c1a00; color: #ffb300; padding: 12px; border-radius: 8px; margin-bottom: 25px; text-align: center; border: 1px solid #553300; font-weight: bold; }
-        .input-group { text-align: center; margin-bottom: 30px; background: #252525; padding: 20px; border-radius: 10px; }
-        input { background: #121212; border: 1px solid #444; color: #fff; padding: 10px; width: 120px; font-size: 18px; border-radius: 5px; text-align: center; }
-        button { background: #ff4b2b; border: none; color: white; padding: 12px 25px; border-radius: 5px; cursor: pointer; font-size: 16px; font-weight: bold; }
-        .result-header { background: #2a2a2a; padding: 20px; border-radius: 10px; border-left: 6px solid #ff4b2b; margin-bottom: 25px; display: flex; justify-content: space-around; }
-        .res-item { text-align: center; }
-        .res-val { display: block; font-size: 1.4em; color: #ff4b2b; font-weight: bold; }
+        body { font-family: sans-serif; background-color: #f0f2f5; margin: 0; padding: 10px; color: #333; }
+        .container { max-width: 500px; margin: 0 auto; background: white; border-radius: 12px; padding: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        h1 { font-size: 1.1rem; text-align: center; color: #1a73e8; margin-top: 0; }
+        
+        .summary { background: #e8f0fe; padding: 12px; border-radius: 8px; margin-bottom: 15px; font-size: 14px; line-height: 1.6; }
+        .summary b { color: #d93025; }
+
+        .input-group { display: flex; gap: 8px; margin-bottom: 15px; }
+        input { flex: 1; padding: 12px; border: 1px solid #ccc; border-radius: 8px; font-size: 16px; outline: none; }
+        button { padding: 12px 15px; background: #1a73e8; color: white; border: none; border-radius: 8px; font-weight: bold; }
+
         table { width: 100%; border-collapse: collapse; }
-        th { background: #333; color: #ff4b2b; padding: 12px; border-bottom: 2px solid #444; }
-        td { padding: 12px; border-bottom: 1px solid #2a2a2a; text-align: center; }
-        .hl { color: #ff4b2b; font-weight: bold; }
+        th { background: #f8f9fa; padding: 10px 5px; font-size: 12px; border-bottom: 2px solid #dee2e6; color: #666; }
+        td { padding: 12px 5px; text-align: center; border-bottom: 1px solid #eee; font-size: 15px; }
+
+        .stage-txt { color: #888; font-size: 12px; }
+        .rune-val { font-weight: bold; color: #e67e22; font-size: 1.1rem; }
+        .prob-val { font-weight: bold; color: #27ae60; font-size: 1.1rem; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>装備強化・石板最適化</h1>
-        <div class="note">⚠️ 下振れが怖いので、入力された値の0.9倍の石板を使用</div>
-        <div class="input-group">
-            用意した石板総数: <input type="number" id="runeCount" value="100">
-            <button onclick="optimize()">最適化計算を実行</button>
-        </div>
-        <div id="results"></div>
+
+<div class="container">
+    <h1>石板最適化ツール</h1>
+    
+    <div class="summary">
+        ⚠️ 入力の<b>0.9倍</b>（下振れ考慮）で計算<br>
+        消費期待値: <span id="res-cost">0.00</span> 枚<br>
+        素材期待値: <span id="res-mat">0.0</span> 個
     </div>
-    <script src="logic.js"></script>
-    <script>
-        function optimize() {
-            const count = document.getElementById('runeCount').value;
-            const optimizer = new UpgradeOptimizer(count);
-            const result = optimizer.calculate();
 
-            let html = `
-                <div class="result-header">
-                    <div class="res-item">石板消費期待値<span class="res-val">${result.totalCost.toFixed(2)} 枚</span></div>
-                    <div class="res-item">使用素材期待値<span class="res-val">約 ${result.totalMatExp.toFixed(1)} 個</span></div>
-                </div>
-                <table>
-                    <thead><tr><th>強化段階</th><th>元の確率</th><th>投入石板</th><th>強化後確率</th></tr></thead>
-                    <tbody>
-            `;
+    <div class="input-group">
+        <input type="number" id="runeInput" placeholder="石板枚数を入力" value="300">
+        <button id="calcBtn">計算</button>
+    </div>
 
-            // 100回目から順に表示されるよう固定
-            result.plan.forEach(p => {
-                html += `
-                    <tr>
-                        <td>${p.stageNum}回目</td>
-                        <td>${Math.round(p.baseP * 100)}%</td>
-                        <td class="hl">${p.runes} 枚</td>
-                        <td>${Math.round(p.prob * 100)}%</td>
-                    </tr>
-                `;
-            });
-            html += `</tbody></table>`;
-            document.getElementById('results').innerHTML = html;
-        }
-    </script>
+    <table>
+        <thead>
+            <tr>
+                <th>強化段階</th>
+                <th>投入枚数</th>
+                <th>成功率</th>
+            </tr>
+        </thead>
+        <tbody id="resultBody"></tbody>
+    </table>
+</div>
+
+<script src="logic.js"></script>
 </body>
 </html>
