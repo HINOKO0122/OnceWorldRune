@@ -11,7 +11,6 @@ class UpgradeOptimizer {
     calculate() {
         let actions = [];
         for (let s of this.stages) {
-            // セット1: 91%以上にする
             let r1 = Math.ceil((0.91 - s.baseP) * 10);
             if (r1 < 0) r1 = 0; if (r1 > 10) r1 = 10;
             let p1 = Math.min(1.0, s.baseP + (r1 * 0.1));
@@ -22,7 +21,6 @@ class UpgradeOptimizer {
                     targetRune: r1, targetProb: p1
                 });
             }
-            // セット2: 100%にする
             if (p1 < 1.0) {
                 let cost1 = r1/p1;
                 actions.push({
@@ -33,7 +31,6 @@ class UpgradeOptimizer {
             }
         }
 
-        // 期待値効率でソート
         actions.sort((a, b) => {
             let vA = a.saving * b.cost;
             let vB = b.saving * a.cost;
@@ -63,26 +60,48 @@ class UpgradeOptimizer {
     }
 }
 
-// 画面への表示処理
 function run() {
     const input = document.getElementById('runeInput').value;
     const opt = new UpgradeOptimizer(Number(input));
     const res = opt.calculate();
 
-    document.getElementById('res-cost').innerText = res.totalCost.toFixed(2);
+    document.getElementById('res-cost').innerText = res.totalCost.toFixed(1);
     document.getElementById('res-mat').innerText = res.totalMat.toFixed(1);
 
     const tbody = document.getElementById('resultBody');
-    tbody.innerHTML = res.plan.map(d => `
-        <tr>
-            <td class="stage-txt">${d.stageNum}回目</td>
-            <td class="rune-val">${d.runes}枚</td>
-            <td class="prob-val">${Math.round(d.prob * 100)}%</td>
-        </tr>
-    `).join('');
+    
+    // まとめる処理
+    let grouped = [];
+    if (res.plan.length > 0) {
+        let current = {
+            start: res.plan[0].stageNum, end: res.plan[0].stageNum,
+            runes: res.plan[0].runes, prob: res.plan[0].prob
+        };
+
+        for (let i = 1; i < res.plan.length; i++) {
+            let item = res.plan[i];
+            // 枚数と確率が同じ、かつ連続した回数ならグループ
+            if (item.runes === current.runes && item.prob === current.prob) {
+                current.end = item.stageNum;
+            } else {
+                grouped.push(current);
+                current = { start: item.stageNum, end: item.stageNum, runes: item.runes, prob: item.prob };
+            }
+        }
+        grouped.push(current);
+    }
+
+    tbody.innerHTML = grouped.map(g => {
+        const range = (g.start === g.end) ? `${g.start}回目` : `${g.start}〜${g.end}回目`;
+        return `
+            <tr>
+                <td class="stage-txt">${range}</td>
+                <td class="rune-val">${g.runes}枚</td>
+                <td class="prob-val">${Math.round(g.prob * 100)}%</td>
+            </tr>
+        `;
+    }).join('');
 }
 
-// ボタンにイベントを登録
 document.getElementById('calcBtn').addEventListener('click', run);
-// 初回起動
 run();
