@@ -70,34 +70,45 @@ function run() {
 
     const tbody = document.getElementById('resultBody');
     
-    // まとめる処理
+    // --- 【改良】枚数が同じ区間をまとめるロジック ---
     let grouped = [];
     if (res.plan.length > 0) {
         let current = {
-            start: res.plan[0].stageNum, end: res.plan[0].stageNum,
-            runes: res.plan[0].runes, prob: res.plan[0].prob
+            start: res.plan[0].stageNum, 
+            end: res.plan[0].stageNum,
+            runes: res.plan[0].runes, 
+            minProb: res.plan[0].prob,
+            maxProb: res.plan[0].prob
         };
 
         for (let i = 1; i < res.plan.length; i++) {
             let item = res.plan[i];
-            // 枚数と確率が同じ、かつ連続した回数ならグループ
-            if (item.runes === current.runes && item.prob === current.prob) {
+            // 「投入枚数」が同じならグループ
+            if (item.runes === current.runes) {
                 current.end = item.stageNum;
+                current.minProb = Math.min(current.minProb, item.prob);
+                current.maxProb = Math.max(current.maxProb, item.prob);
             } else {
                 grouped.push(current);
-                current = { start: item.stageNum, end: item.stageNum, runes: item.runes, prob: item.prob };
+                current = { start: item.stageNum, end: item.stageNum, runes: item.runes, minProb: item.prob, maxProb: item.prob };
             }
         }
         grouped.push(current);
     }
 
     tbody.innerHTML = grouped.map(g => {
-        const range = (g.start === g.end) ? `${g.start}回目` : `${g.start}〜${g.end}回目`;
+        const range = (g.start === g.end) ? `${g.start}回目` : `${g.start}〜${g.end}`;
+        
+        // 確率の表示（最小と最大が同じなら1つだけ、違うなら範囲表示）
+        const pMin = Math.round(g.minProb * 100);
+        const pMax = Math.round(g.maxProb * 100);
+        const probDisplay = (pMin === pMax) ? `${pMin}%` : `${pMin}〜${pMax}%`;
+
         return `
             <tr>
                 <td class="stage-txt">${range}</td>
                 <td class="rune-val">${g.runes}枚</td>
-                <td class="prob-val">${Math.round(g.prob * 100)}%</td>
+                <td class="prob-val">${probDisplay}</td>
             </tr>
         `;
     }).join('');
