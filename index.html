@@ -9,18 +9,19 @@
         .container { max-width: 500px; margin: 0 auto; background: white; border-radius: 12px; padding: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
         h1 { font-size: 1.1rem; text-align: center; color: #1a73e8; margin-top: 0; }
         
-        .summary { background: #e8f0fe; padding: 12px; border-radius: 8px; margin-bottom: 15px; font-size: 14px; line-height: 1.6; }
-        .summary b { color: #d93025; }
+        .summary { background: #fdf2f2; padding: 12px; border-radius: 8px; margin-bottom: 15px; font-size: 13px; line-height: 1.5; border: 1px solid #f5c6cb; }
+        .summary b { color: #d93025; font-size: 1.1em; }
+        .stats { display: flex; justify-content: space-around; margin-top: 5px; font-weight: bold; color: #444; }
 
         .input-group { display: flex; gap: 8px; margin-bottom: 15px; }
         input { flex: 1; padding: 12px; border: 1px solid #ccc; border-radius: 8px; font-size: 16px; outline: none; }
-        button { padding: 12px 15px; background: #1a73e8; color: white; border: none; border-radius: 8px; font-weight: bold; }
+        button { padding: 12px 15px; background: #1a73e8; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
 
         table { width: 100%; border-collapse: collapse; }
         th { background: #f8f9fa; padding: 10px 5px; font-size: 12px; border-bottom: 2px solid #dee2e6; color: #666; }
         td { padding: 12px 5px; text-align: center; border-bottom: 1px solid #eee; font-size: 15px; }
 
-        .stage-txt { color: #888; font-size: 12px; }
+        .stage-txt { color: #555; font-size: 14px; font-weight: 500; white-space: nowrap; }
         .rune-val { font-weight: bold; color: #e67e22; font-size: 1.1rem; }
         .prob-val { font-weight: bold; color: #27ae60; font-size: 1.1rem; }
     </style>
@@ -31,20 +32,22 @@
     <h1>石板最適化ツール</h1>
     
     <div class="summary">
-        ⚠️ 入力の<b>0.9倍</b>（下振れ考慮）で計算<br>
-        消費期待値: <span id="res-cost">0.00</span> 枚<br>
-        素材期待値: <span id="res-mat">0.0</span> 個
+        ⚠️ 入力の<b>0.9倍</b>（下振れ考慮）で計算
+        <div class="stats">
+            <div>石板: <span id="res-cost">0.0</span>枚</div>
+            <div>素材: <span id="res-mat">0.0</span>個</div>
+        </div>
     </div>
 
     <div class="input-group">
-        <input type="number" id="runeInput" placeholder="石板枚数を入力" value="300">
+        <input type="number" id="runeInput" placeholder="石板枚数" value="300">
         <button id="calcBtn">計算</button>
     </div>
 
     <table>
         <thead>
             <tr>
-                <th>強化段階</th>
+                <th>段階</th>
                 <th>投入枚数</th>
                 <th>成功率</th>
             </tr>
